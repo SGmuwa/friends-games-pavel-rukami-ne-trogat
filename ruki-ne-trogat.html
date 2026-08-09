@@ -25,6 +25,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#100c09">
 <title>Руками не трогать!</title>
 <style>
   :root{
@@ -35,15 +39,23 @@
     --wood:#6b543c;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#100c09;
+  html{height:100%;overflow:hidden;overscroll-behavior:none}
+  /* Тело фиксировано и высотой ровно в видимую часть экрана: на Android иначе
+     страница тянется под адресную строку и её можно проскроллить прямо во время
+     игры. dvh даёт живую высоту, 100% — запасной вариант для старых браузеров. */
+  body{position:fixed;top:0;left:0;right:0;height:100%;height:100dvh;
+    margin:0;padding:0;overflow:hidden;overscroll-behavior:none;background:#100c09;
     font-family:"PT Sans","Trebuchet MS",Verdana,sans-serif;color:var(--paper);
-    -webkit-user-select:none;user-select:none;touch-action:manipulation}
-  #wrap{position:fixed;inset:0}
-  canvas{display:block;width:100%;height:100%;cursor:crosshair}
+    -webkit-user-select:none;user-select:none;touch-action:none}
+  #wrap{position:absolute;inset:0}
+  canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
 
   .overlay{position:absolute;inset:0;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:14px;padding:20px;
-    background:rgba(12,9,7,.86);backdrop-filter:blur(3px);z-index:10;overflow:auto}
+    align-items:center;justify-content:center;gap:14px;z-index:10;overflow:auto;
+    padding:calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+            calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+    background:rgba(12,9,7,.86);backdrop-filter:blur(3px);
+    touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
   .hidden{display:none !important}
   .panel{max-width:560px;width:100%;background:#221913;border:3px solid #4a3a28;
     border-radius:14px;padding:22px 20px;text-align:center;
@@ -73,23 +85,31 @@
     font-size:19px;padding-top:10px;color:#f7d76a}
 
   #hud{position:absolute;top:0;left:0;right:0;display:flex;gap:10px;align-items:center;
-    padding:8px 10px;font-weight:700;font-size:clamp(13px,3.4vw,17px);z-index:5;
+    font-weight:700;font-size:clamp(13px,3.4vw,17px);z-index:5;
+    padding:calc(8px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right))
+            8px calc(10px + env(safe-area-inset-left));
     text-shadow:1px 2px 0 #000;pointer-events:none}
   #hud .box{background:rgba(20,14,10,.62);border:2px solid #4a3a28;border-radius:9px;
-    padding:5px 10px;white-space:nowrap;font-variant-numeric:tabular-nums}
-  #hud .spacer{flex:1}
-  #hud button{pointer-events:auto;padding:6px 11px;font-size:15px}
+    padding:5px 10px;white-space:nowrap;font-variant-numeric:tabular-nums;flex:0 0 auto}
+  #hud .spacer{flex:1 1 auto;min-width:0}
+  #hud button{pointer-events:auto;padding:6px 11px;font-size:15px;flex:0 0 auto}
+  /* Самый узкий экран: слова уходят, остаются значки и числа */
+  #hud.compact .lbl{display:none}
+  #hud.compact #hudScore::before{content:"★ "}
+  #hud.compact #hudBundles::before{content:"🌿 "}
+  #hud.compact #hudTime::before{content:"⏱ "}
   .low{color:#ff6b6b}
-  /* Узкий экран телефона: иначе кнопка «Лавка» уезжает за правый край */
+  /* Узкий экран телефона: кегль подбирает fitHud() в JS, здесь только отступы —
+     иначе правило на .box перебило бы наследование от #hud и подгонка сломалась. */
   @media (max-width:560px){
-    #hud{gap:5px;padding:6px 6px}
-    #hud .box{padding:4px 7px;font-size:12.5px;border-width:1.5px}
-    #hud button{padding:5px 8px;font-size:13px}
+    #hud{gap:5px;padding-left:calc(6px + env(safe-area-inset-left));
+         padding-right:calc(6px + env(safe-area-inset-right))}
+    #hud .box{padding:4px 7px;border-width:1.5px}
+    #hud button{padding:5px 8px}
   }
-  @media (max-width:380px){
-    #hud .box{padding:3px 5px;font-size:11px}
-    #hud button{padding:4px 6px;font-size:12px}
-  }
+  #hud.compact{gap:4px}
+  #hud.compact .box{padding:3px 5px;border-width:1.5px}
+  #hud.compact button{padding:4px 6px}
   #shopInfo{margin:10px 0;font-size:16px;line-height:1.6}
   .kbd{display:inline-block;background:#3a2c1f;border:1px solid #7d6340;border-radius:5px;
     padding:1px 6px;font-size:13px}
@@ -101,11 +121,12 @@
   <canvas id="cv"></canvas>
 
   <div id="hud" class="hidden">
-    <div class="box">Очки: <span id="hudScore">0</span></div>
-    <div class="box">Пучки: <span id="hudBundles">10</span></div>
-    <div class="box">Смена: <span id="hudTime">5:00</span></div>
+    <div class="box"><span class="lbl">Очки:</span> <span id="hudScore">0</span></div>
+    <div class="box"><span class="lbl">Пучки:</span> <span id="hudBundles">10</span></div>
+    <div class="box"><span class="lbl">Смена:</span> <span id="hudTime">2:00</span></div>
     <div class="spacer"></div>
     <button id="btnSound" title="Звук">🔊</button>
+    <button id="btnFull" title="Во весь экран">⛶</button>
     <button id="btnShop">Лавка</button>
   </div>
 
@@ -120,14 +141,15 @@
         Отрубил руку — пучок продан. Прозевал — пучок испорчен.
         Пучки кончились — смена сорвана.
       </p>
-      <p class="lead"><b>Смена длится 5 минут. Выбери уровень:</b></p>
+      <p class="lead"><b>Смена длится 2 минуты. Чем дальше, тем быстрее хватают руки —
+        в финале на удар остаётся 0.15 секунды. Выбери уровень:</b></p>
       <div class="row">
         <button class="diffbtn" data-diff="easy"><b>Ученик знахаря</b>
-          <span>15 пучков, пучок 50, руки медленные</span></button>
+          <span>15 пучков, пучок 40, разгон плавный</span></button>
         <button class="diffbtn" data-diff="normal"><b>Знахарь</b>
-          <span>10 пучков, пучок 100, руки бойкие</span></button>
+          <span>10 пучков, пучок 100, разгон бодрый</span></button>
         <button class="diffbtn" data-diff="hard"><b>Мясник</b>
-          <span>8 пучков, пучок 120, руки молниеносные</span></button>
+          <span>8 пучков, пучок 90, разгон с первой секунды</span></button>
       </div>
       <p class="lead" id="bestLine" style="margin-top:14px"></p>
       <div class="credits">
@@ -183,36 +205,47 @@
    1. БАЛАНС.  Правишь сложность — правишь ТОЛЬКО эту таблицу.
    Инвариант: price < sell, иначе каждая продажа убыточна и смерть
    неизбежна при любом скилле (пучок тратится и на продаже, и на промахе).
+
+   Окна реакции НЕ случайные: это рампа [начало, конец, кривизна].
+   Окно = lerp(начало, конец, прогресс_смены ^ кривизна).
+   Кривизна 1 — линейный разгон с первой секунды; больше 1 — долгая
+   раскачка и обвал в самом финале. Ею и различаются уровни.
    ═════════════════════════════════════════════════════════════════════ */
 const DIFFICULTY = {
   easy: {
     key:'easy', name:'Ученик знахаря',
-    grab:[0.80, 2.00],      // окно на удар по руке, секунды
-    flee:[1.60, 2.40],      // окно на бросок ножа в вора
-    startBundles:15, price:50,
-    sell:150, missPts:-50, thiefPts:150, thiefEscPts:-100,
-    thiefEvery:6,           // вор после каждого N-го покупателя
-    spawn:[2.4, 1.15],      // интервал спавна: начало смены → конец
+    grab:[2.40, 0.15, 2.40], // окно на удар по руке: 2.40 с → 0.15 с
+    flee:[2.40, 0.90, 2.40], // окно на бросок ножа в вора
+    startBundles:15, price:40,
+    sell:150, missPts:-30, thiefPts:150, thiefEscPts:-100,
+    thiefEvery:6,            // вор после каждого N-го покупателя
+    spawn:[2.30, 0.60],      // интервал спавна: начало смены → конец
   },
   normal: {
     key:'normal', name:'Знахарь',
-    grab:[0.50, 2.00], flee:[1.40, 2.20],
+    grab:[2.00, 0.15, 1.60], flee:[2.20, 0.70, 1.60],
     startBundles:10, price:100,
     sell:150, missPts:-50, thiefPts:150, thiefEscPts:-100,
-    thiefEvery:5, spawn:[2.1, 0.95],
+    thiefEvery:5, spawn:[2.10, 0.50],
   },
   hard: {
     key:'hard', name:'Мясник',
-    grab:[0.35, 1.20], flee:[1.20, 1.80],
-    startBundles:8, price:120,
-    sell:150, missPts:-100, thiefPts:150, thiefEscPts:-150,
-    thiefEvery:4, spawn:[1.8, 0.80],
+    grab:[1.50, 0.15, 1.00], flee:[1.90, 0.50, 1.00],
+    startBundles:8, price:90,
+    sell:150, missPts:-60, thiefPts:150, thiefEscPts:-120,
+    thiefEvery:4, spawn:[1.80, 0.42],
   },
 };
 
-const SHIFT_SECONDS = 300;      // 5 минут
+const SHIFT_SECONDS = 120;      // 2 минуты
+const MAX_ON_SCREEN = 5;        // сколько покупателей толпится разом к концу смены
 const ASK_TIME      = 0.32;     // «Сколько стоят?» перед тем как потянуть руку
 const MAX_HANGING   = 14;       // сколько пучков влезает на верёвку
+
+// Прогресс смены 0 → 1. От него зависят и окна реакции, и плотность толпы.
+const shiftProgress = ()=> clamp(1 - G.timeLeft/SHIFT_SECONDS, 0, 1);
+// Окно реакции на текущий момент смены по рампе [начало, конец, кривизна]
+const rampWindow = ([from, to, curve], prog)=> lerp(from, to, Math.pow(prog, curve));
 
 /* ═════════════════════════════════════════════════════════════════════
    2. ЗВУК
@@ -465,14 +498,27 @@ function makeAppearance(){
   };
 }
 
+// До пяти человек разом — если ставить их в случайные точки, они слипаются
+// в одну кучу и кисти становятся неразличимы. Берём самое свободное место.
+function freeLane(lo, hi){
+  const busy = G.people.filter(p=>!p.dead).map(p=>p.laneX);
+  let best=rnd(lo,hi), bestGap=-1;
+  for(let i=0;i<8;i++){
+    const x=rnd(lo,hi);
+    const gap = busy.length ? Math.min(...busy.map(b=>Math.abs(b-x))) : Infinity;
+    if(gap>bestGap){ bestGap=gap; best=x; }
+  }
+  return best;
+}
+
 function spawnCustomer(){
   const d = G.diff;
-  const grab = rnd(d.grab[0], d.grab[1]);
-  // Походка выдаёт хватку: кто быстро хватает — быстро и подходит.
-  const tNorm = (grab - d.grab[0]) / Math.max(0.001, d.grab[1]-d.grab[0]);
-  const approach = lerp(0.95, 2.6, tNorm);
+  const prog = shiftProgress();
+  const grab = rampWindow(d.grab, prog);
+  // Походка выдаёт хватку: к концу смены народ и подходит, и хватает быстрее.
+  const approach = lerp(2.40, 0.70, prog);
 
-  const laneX = rnd(W*0.16, W*0.84);
+  const laneX = freeLane(W*0.14, W*0.86);
   const fromX = lerp(W*0.5, laneX, 0.25) + rnd(-W*0.06, W*0.06);
 
   G.people.push({
@@ -492,11 +538,12 @@ function spawnCustomer(){
 
 function spawnThief(){
   const d = G.diff;
-  const laneX = rnd(W*0.20, W*0.80);
+  const prog = shiftProgress();
+  const laneX = freeLane(W*0.18, W*0.82);
   G.people.push({
     kind:'thief', state:'run', t:0,
-    approach: rnd(0.7,0.95),
-    flee: rnd(d.flee[0], d.flee[1]),
+    approach: lerp(0.95, 0.60, prog),
+    flee: rampWindow(d.flee, prog),
     z:0, laneX, fromX: lerp(W*0.5, laneX, 0.3),
     look: makeAppearance(),
     bubble:null, bubbleT:0,
@@ -554,8 +601,8 @@ function update(dt){
   G.timeLeft -= dt;
   if(G.timeLeft<=0){ G.timeLeft=0; endGame('win'); return; }
 
-  const prog = 1 - G.timeLeft/SHIFT_SECONDS;       // 0 → 1 за смену
-  const maxActive = 1 + Math.floor(prog*2.999);    // 1 → 3 покупателя
+  const prog = shiftProgress();                              // 0 → 1 за смену
+  const maxActive = 1 + Math.floor(prog*(MAX_ON_SCREEN-0.001)); // 1 → MAX_ON_SCREEN
   const d = G.diff;
 
   // ---- спавн
@@ -1091,17 +1138,18 @@ function drawHat(g, L, back){
   const hy = g.headY - g.headR*0.75;
   ctx.strokeStyle='#231a12'; ctx.lineWidth=Math.max(1.5,g.h*0.018);
   if(L.hat==='kerchief'){
+    // нижняя кромка платка держится выше глаз (они на headY-0.12R)
     ctx.fillStyle=L.accent;
     ctx.beginPath();
-    ctx.moveTo(g.x-g.headR*1.15, g.headY+g.headR*0.1);
-    ctx.quadraticCurveTo(g.x, g.headY-g.headR*1.6, g.x+g.headR*1.15, g.headY+g.headR*0.1);
-    ctx.quadraticCurveTo(g.x, g.headY+g.headR*0.45, g.x-g.headR*1.15, g.headY+g.headR*0.1);
+    ctx.moveTo(g.x-g.headR*1.10, g.headY-g.headR*0.18);
+    ctx.quadraticCurveTo(g.x, g.headY-g.headR*1.65, g.x+g.headR*1.10, g.headY-g.headR*0.18);
+    ctx.quadraticCurveTo(g.x, g.headY+g.headR*0.20, g.x-g.headR*1.10, g.headY-g.headR*0.18);
     ctx.fill(); ctx.stroke();
     if(!back){
       ctx.beginPath();
-      ctx.moveTo(g.x+g.headR*0.9, g.headY+g.headR*0.1);
-      ctx.lineTo(g.x+g.headR*1.5, g.headY+g.headR*0.75);
-      ctx.lineTo(g.x+g.headR*0.7, g.headY+g.headR*0.5);
+      ctx.moveTo(g.x+g.headR*0.95, g.headY-g.headR*0.10);
+      ctx.lineTo(g.x+g.headR*1.60, g.headY+g.headR*0.60);
+      ctx.lineTo(g.x+g.headR*0.80, g.headY+g.headR*0.30);
       ctx.closePath(); ctx.fill(); ctx.stroke();
     }
   }else if(L.hat==='cap'){
@@ -1116,22 +1164,22 @@ function drawHat(g, L, back){
     ctx.fill(); ctx.stroke();
   }else if(L.hat==='ushanka'){
     ctx.fillStyle=L.accent;
-    ctx.beginPath();
-    ctx.roundRect(g.x-g.headR*1.15, hy-g.headR*0.2, g.headR*2.3, g.headR*1.1, g.headR*0.4);
+    ctx.beginPath();   // тулья кончается выше глаз
+    ctx.roundRect(g.x-g.headR*1.15, hy-g.headR*0.50, g.headR*2.3, g.headR*1.0, g.headR*0.4);
     ctx.fill(); ctx.stroke();
     ctx.fillStyle=L.hair;
-    for(const s of [-1,1]){
+    for(const s of [-1,1]){   // уши свисают по бокам, лицо не задевают
       ctx.beginPath();
-      ctx.roundRect(g.x+s*g.headR*1.15-g.headR*0.3, hy+g.headR*0.5, g.headR*0.6, g.headR*1.1, g.headR*0.25);
+      ctx.roundRect(g.x+s*g.headR*1.15-g.headR*0.3, hy+g.headR*0.30, g.headR*0.6, g.headR*1.1, g.headR*0.25);
       ctx.fill(); ctx.stroke();
     }
-  }else{ // hat
+  }else{ // hat — поля выше линии глаз, иначе шляпа «съедает» лицо
     ctx.fillStyle=L.accent;
     ctx.beginPath();
-    ctx.ellipse(g.x, hy+g.headR*0.35, g.headR*1.5, g.headR*0.26, 0, 0, 6.2832);
+    ctx.ellipse(g.x, hy+g.headR*0.10, g.headR*1.5, g.headR*0.22, 0, 0, 6.2832);
     ctx.fill(); ctx.stroke();
     ctx.beginPath();
-    ctx.roundRect(g.x-g.headR*0.75, hy-g.headR*0.85, g.headR*1.5, g.headR*1.2, g.headR*0.2);
+    ctx.roundRect(g.x-g.headR*0.75, hy-g.headR*1.05, g.headR*1.5, g.headR*1.15, g.headR*0.2);
     ctx.fill(); ctx.stroke();
   }
 }
@@ -1597,6 +1645,7 @@ function startGame(diffKey){
   show('scrMenu',false); show('scrShop',false);
   show('scrFinale',false); show('scrStats',false);
   el('hud').classList.remove('hidden');
+  fitHud();                     // измерять можно только когда HUD показан
   Sound.stopMusic();
 }
 
@@ -1695,7 +1744,7 @@ function showStats(){
   const s=G.stats, win=G.outcome==='win';
   el('statsTitle').textContent = win ? '🌿 Смена отработана' : '💀 Смена сорвана';
   el('statsSub').textContent = win
-    ? `Уровень «${G.diff.name}». Прилавок выстоял все 5 минут.`
+    ? `Уровень «${G.diff.name}». Прилавок выстоял всю смену.`
     : `Уровень «${G.diff.name}». Товар кончился, торговать нечем.`;
   const rows=[
     ['Покалечено покупателей', s.maimed],
@@ -1749,6 +1798,26 @@ function resize(){
   W = cv.clientWidth; H = cv.clientHeight;
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
   ctx.setTransform(DPR,0,0,DPR,0,0);
+  fitHud();
+}
+
+/* HUD подгоняется по фактической ширине холста, а не по медиазапросам:
+   на узком телефоне кнопка «Лавка» иначе уезжает за правый край. Сначала
+   уменьшаем кегль, и только если этого мало — прячем слова, оставив значки. */
+function fitHud(){
+  const hud = el('hud');
+  const base = clamp(W*0.036, 11, 17);
+  const fits = ()=> hud.scrollWidth <= hud.clientWidth + 1;
+  const set  = fs => hud.style.fontSize = fs.toFixed(1)+'px';
+
+  hud.classList.remove('compact');
+  set(base);
+  if(fits()) return;
+
+  hud.classList.add('compact');   // сначала прячем слова — это дешевле, чем мельчить
+  set(base);
+  let fs = base, guard = 0;
+  while(!fits() && fs > 9 && guard++ < 30){ fs -= 0.5; set(fs); }
 }
 window.addEventListener('resize', resize);
 
@@ -1762,6 +1831,34 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 
+/* ---- полный экран и запрет протяжки страницы ----
+   На Android страницу можно утянуть пальцем прямо во время игры: палец
+   промахивается мимо руки и вместо удара скроллит экран. Гасим протяжку
+   везде, кроме прокручиваемых оверлеев (меню и итоги бывают выше экрана). */
+document.addEventListener('touchmove', e=>{
+  if(!(e.target instanceof Element) || !e.target.closest('.overlay')) e.preventDefault();
+}, {passive:false});
+document.addEventListener('gesturestart', e=>e.preventDefault());
+
+function isFullscreen(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function goFullscreen(){
+  if(isFullscreen()) return;
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if(!req) return;                       // iOS Safari не умеет — там спасает position:fixed
+  try{ const r = req.call(el, {navigationUI:'hide'}); if(r && r.catch) r.catch(()=>{}); }
+  catch(e){ try{ req.call(el); }catch(_){} }
+}
+function exitFullscreen(){
+  const ex = document.exitFullscreen || document.webkitExitFullscreen;
+  if(ex){ try{ const r = ex.call(document); if(r && r.catch) r.catch(()=>{}); }catch(e){} }
+}
+function syncFullBtn(){ el('btnFull').textContent = isFullscreen() ? '⤡' : '⛶'; }
+document.addEventListener('fullscreenchange', ()=>{ syncFullBtn(); resize(); });
+document.addEventListener('webkitfullscreenchange', ()=>{ syncFullBtn(); resize(); });
+
 cv.addEventListener('pointerdown', e=>{
   e.preventDefault();
   const r = cv.getBoundingClientRect();
@@ -1771,17 +1868,19 @@ cv.addEventListener('contextmenu', e=>e.preventDefault());
 
 document.querySelectorAll('.diffbtn').forEach(b=>{
   b.addEventListener('click', async ()=>{
+    goFullscreen();                      // только из жеста пользователя, иначе браузер откажет
     await Sound.init();
     startGame(b.dataset.diff);
   });
 });
+el('btnFull').addEventListener('click', ()=> isFullscreen() ? exitFullscreen() : goFullscreen());
 el('btnShop').addEventListener('click', ()=>openShop());
 el('btnResume').addEventListener('click', closeShop);
 el('buy1').addEventListener('click', ()=>buy(1));
 el('buy5').addEventListener('click', ()=>buy(5));
 el('buyMax').addEventListener('click', ()=>buy(999));
 el('btnStats').addEventListener('click', showStats);
-el('btnAgain').addEventListener('click', ()=>startGame(G.diff.key));
+el('btnAgain').addEventListener('click', ()=>{ goFullscreen(); startGame(G.diff.key); });
 el('btnMenu').addEventListener('click', toMenu);
 el('btnSound').addEventListener('click', ()=>{
   Sound.on = !Sound.on;
@@ -1809,7 +1908,11 @@ window.GAME = {
 };
 
 resize();
+syncFullBtn();
 refreshBestLine();
+// Адресная строка Android меняет высоту вьюпорта на лету — пересчитываем канву.
+if(window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+window.addEventListener('orientationchange', ()=>setTimeout(resize, 250));
 requestAnimationFrame(frame);
 </script>
 </body>
