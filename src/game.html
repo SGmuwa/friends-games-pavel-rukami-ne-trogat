@@ -147,7 +147,7 @@
         <button class="diffbtn" data-diff="easy"><b>Ученик знахаря</b>
           <span>15 пучков, пучок 40, разгон плавный</span></button>
         <button class="diffbtn" data-diff="normal"><b>Знахарь</b>
-          <span>10 пучков, пучок 100, разгон бодрый</span></button>
+          <span>10 пучков, пучок 80, разгон бодрый</span></button>
         <button class="diffbtn" data-diff="hard"><b>Мясник</b>
           <span>8 пучков, пучок 90, разгон с первой секунды</span></button>
       </div>
@@ -219,26 +219,26 @@ const DIFFICULTY = {
     startBundles:15, price:40,
     sell:150, missPts:-30, thiefPts:150, thiefEscPts:-100,
     thiefEvery:6,            // вор после каждого N-го покупателя
-    spawn:[2.30, 0.60],      // интервал спавна: начало смены → конец
+    spawn:[2.30, 0.22],      // интервал спавна: начало смены → конец
   },
   normal: {
     key:'normal', name:'Знахарь',
     grab:[2.00, 0.15, 1.60], flee:[2.20, 0.70, 1.60],
-    startBundles:10, price:100,
-    sell:150, missPts:-50, thiefPts:150, thiefEscPts:-100,
-    thiefEvery:5, spawn:[2.10, 0.50],
+    startBundles:10, price:80,
+    sell:150, missPts:-40, thiefPts:150, thiefEscPts:-100,
+    thiefEvery:5, spawn:[2.10, 0.18],
   },
   hard: {
     key:'hard', name:'Мясник',
     grab:[1.50, 0.15, 1.00], flee:[1.90, 0.50, 1.00],
     startBundles:8, price:90,
     sell:150, missPts:-60, thiefPts:150, thiefEscPts:-120,
-    thiefEvery:4, spawn:[1.80, 0.42],
+    thiefEvery:4, spawn:[1.80, 0.15],
   },
 };
 
 const SHIFT_SECONDS = 120;      // 2 минуты
-const MAX_ON_SCREEN = 5;        // сколько покупателей толпится разом к концу смены
+const MAX_ON_SCREEN = 10;       // сколько покупателей толпится разом к концу смены
 const ASK_TIME      = 0.32;     // «Сколько стоят?» перед тем как потянуть руку
 const MAX_HANGING   = 14;       // сколько пучков влезает на верёвку
 
@@ -251,6 +251,47 @@ const rampWindow = ([from, to, curve], prog)=> lerp(from, to, Math.pow(prog, cur
    2. ЗВУК
    ═════════════════════════════════════════════════════════════════════ */
 const AUDIO_B64 = /*__AUDIO__*/{};
+
+/* Пулы реплик. Из пула тянется случайная, подряд одна и та же не повторяется.
+   Реплики покупателя выбираются по полу — мужские и женские записаны отдельно. */
+const LINES = {
+  chop:  ['chop1','chop2','chop3','chop4','chop5'],   // продавец рубит руку
+  ask_f: ['ask_f1','ask_f2'],                          // покупательница подошла
+  ask_m: ['ask_m1','ask_m2'],                          // покупатель подошёл
+  miss_f:['miss_f1','miss_f2'],                        // она успела убрать руку
+  miss_m:['miss_m1','miss_m2'],                        // он успел убрать руку
+  grab:  ['grab1','grab2','grab3'],                    // вор схватил пучок
+  stab:  ['stab1','stab2'],                            // нож вошёл вору в спину
+  esc:   ['esc1','esc2'],                              // вор ушёл с пучком
+  low:   ['low1','low2'],                              // пучки заканчиваются
+  crow:  ['crow0','crow1','crow2'],                    // карканье на поражении
+};
+
+/* Текст реплик — дублируется баблами и плашкой, чтобы игра читалась без звука. */
+const TEXT = {
+  chop1:'Руками не трогать!', chop2:'Соблюдай порядок!', chop3:'А ну не лапай!',
+  chop4:'Куда лезешь?',       chop5:'Грабли убери!',
+  ask_f1:'А сколько стоит?',  ask_f2:'Продайте это',
+  ask_m1:'Почём?',            ask_m2:'Дайте понюхать!',
+  miss_m1:'Ну ты чё, аккуратнее?', miss_m2:'Осторожнее!',
+  miss_f1:'Размахался!',           miss_f2:'Ай! Ну ты чё?',
+  grab1:'Держи его!',   grab2:'Куда?!',        grab3:'Стой!',
+  stab1:'Не воруй!',    stab2:'Беги, лечись!',
+  esc1:'Шарапова на тебя нет!', esc2:'Эх! Ты убёг!',
+  low1:'Пучки заканчиваются',   low2:'Кончаются пучёчки',
+  stock_out:'Ну как так-то?',
+  win_line:'Смена отработана! Всех обслужил!',
+  lose_line:'Я разорён',
+};
+
+const lastLine = {};
+function pickLine(pool){
+  const arr = LINES[pool];
+  let i = rint(0, arr.length-1);
+  if(arr.length>1 && i===lastLine[pool]) i = (i+1)%arr.length;
+  lastLine[pool] = i;
+  return arr[i];
+}
 
 const Sound = {
   ctx:null, buf:{}, on:true, ready:false, voices:[], music:null, musicGain:null,
@@ -285,17 +326,19 @@ const Sound = {
     return {src:s, gain:g};
   },
 
-  // Реплики: держим максимум 2 одновременно, чтобы толпа не превращалась в кашу.
+  // Реплики: держим максимум 3 одновременно, чтобы толпа не превращалась в кашу.
   say(name, opts){
     const h = this.play(name, opts);
     if(!h) return;
     this.voices.push(h);
     h.src.onended = ()=>{ const i=this.voices.indexOf(h); if(i>=0) this.voices.splice(i,1); };
-    while(this.voices.length>2){
+    while(this.voices.length>3){
       const old = this.voices.shift();
       try{ old.src.stop(); }catch(e){}
     }
   },
+  busy(){ return this.voices.length; },
+  dur(name){ return (this.buf[name] && this.buf[name].duration) || 0; },
 
   playMusic(name){
     this.stopMusic();
@@ -498,17 +541,30 @@ function makeAppearance(){
   };
 }
 
-// До пяти человек разом — если ставить их в случайные точки, они слипаются
+// До десяти человек разом — если ставить их в случайные точки, они слипаются
 // в одну кучу и кисти становятся неразличимы. Берём самое свободное место.
 function freeLane(lo, hi){
   const busy = G.people.filter(p=>!p.dead).map(p=>p.laneX);
   let best=rnd(lo,hi), bestGap=-1;
-  for(let i=0;i<8;i++){
+  for(let i=0;i<14;i++){
     const x=rnd(lo,hi);
     const gap = busy.length ? Math.min(...busy.map(b=>Math.abs(b-x))) : Infinity;
     if(gap>bestGap){ bestGap=gap; best=x; }
   }
   return best;
+}
+
+// Сколько покупателей вправе стоять у прилавка прямо сейчас: строго один в начале
+// смены, до MAX_ON_SCREEN к концу.
+function crowdCap(prog){
+  return 1 + Math.floor(clamp(prog,0,1)*(MAX_ON_SCREEN-0.001));
+}
+
+// Чем плотнее толпа, тем мельче фигуры — иначе вдесятером они не помещаются
+// по ширине и перекрывают друг другу кисти. Множитель фиксируется при появлении
+// и с человеком не меняется, иначе фигура прыгала бы в размере на глазах.
+function crowdScale(prog){
+  return lerp(1.0, 0.60, (crowdCap(prog)-1)/(MAX_ON_SCREEN-1));
 }
 
 function spawnCustomer(){
@@ -518,13 +574,14 @@ function spawnCustomer(){
   // Походка выдаёт хватку: к концу смены народ и подходит, и хватает быстрее.
   const approach = lerp(2.40, 0.70, prog);
 
-  const laneX = freeLane(W*0.14, W*0.86);
+  const laneX = freeLane(W*0.09, W*0.91);
   const fromX = lerp(W*0.5, laneX, 0.25) + rnd(-W*0.06, W*0.06);
+  const sizeK = crowdScale(prog);
 
   G.people.push({
     kind:'customer', state:'approach', t:0,
     approach, grab, ask:ASK_TIME,
-    z:0, laneX, fromX,
+    z:0, laneX, fromX, sizeK,
     look: makeAppearance(),
     arm: Math.random()<0.5 ? -1 : 1,   // какой рукой тянется
     targetSlot:null,
@@ -539,9 +596,9 @@ function spawnCustomer(){
 function spawnThief(){
   const d = G.diff;
   const prog = shiftProgress();
-  const laneX = freeLane(W*0.18, W*0.82);
+  const laneX = freeLane(W*0.14, W*0.86);
   G.people.push({
-    kind:'thief', state:'run', t:0,
+    kind:'thief', state:'run', t:0, sizeK: crowdScale(prog),
     approach: lerp(0.95, 0.60, prog),
     flee: rampWindow(d.flee, prog),
     z:0, laneX, fromX: lerp(W*0.5, laneX, 0.3),
@@ -573,6 +630,15 @@ function pop(x,y,text,color){
   G.pops.push({x,y,text,color,age:0,life:1.2});
 }
 
+/* Крик продавца. Бабла у него быть не может — продавец это сам игрок, его на сцене
+   нет. Поэтому реплика идёт плашкой над прилавком, как субтитр собственного голоса. */
+function shout(pool, {voice=true, name=null}={}){
+  const n = name || pickLine(pool);
+  if(voice) Sound.say(n, {vol:1.0});
+  G.shout = {text: TEXT[n] || '', age:0, life:1.6};
+  return n;
+}
+
 /* ═════════════════════════════════════════════════════════════════════
    8. ОЧКИ И ПУЧКИ
    ═════════════════════════════════════════════════════════════════════ */
@@ -580,10 +646,25 @@ function addScore(n){ G.score += n; }
 
 function loseBundle(reason){
   G.bundles = Math.max(0, G.bundles-1);
+  checkLowStock();
   if(G.bundles===0) checkOutOfStock();
 }
+
+// Предупреждение о тающем запасе. Срабатывает один раз на пересечение порога,
+// иначе продавец начинает причитать над каждым проданным пучком.
+function checkLowStock(){
+  if(G.mode!=='play') return;
+  if(G.bundles>0 && G.bundles<=3 && !G.lowWarned){
+    G.lowWarned = true;
+    shout('low');
+  }else if(G.bundles>=5){
+    G.lowWarned = false;
+  }
+}
+
 function checkOutOfStock(){
   if(G.bundles>0 || G.mode!=='play') return;
+  shout(null, {name:'stock_out'});
   if(G.score >= G.diff.price){
     openShop('Товар кончился! Закупись, иначе смена сорвана.');
   }else{
@@ -602,7 +683,7 @@ function update(dt){
   if(G.timeLeft<=0){ G.timeLeft=0; endGame('win'); return; }
 
   const prog = shiftProgress();                              // 0 → 1 за смену
-  const maxActive = 1 + Math.floor(prog*(MAX_ON_SCREEN-0.001)); // 1 → MAX_ON_SCREEN
+  const maxActive = crowdCap(prog);                          // 1 → MAX_ON_SCREEN
   const d = G.diff;
 
   // ---- спавн
@@ -648,6 +729,8 @@ function update(dt){
   for(const p of G.pops){ p.age+=dt; p.y -= 46*dt; }
   G.pops = G.pops.filter(p=>p.age<p.life);
 
+  if(G.shout && G.shout.age < G.shout.life) G.shout.age += dt;
+
   for(const s of G.slashes) s.age+=dt;
   G.slashes = G.slashes.filter(s=>s.age<s.life);
 
@@ -667,8 +750,11 @@ function updateCustomer(p, dt){
       p.z = clamp(p.t/p.approach, 0, 1);
       if(p.z>=1){
         p.state='ask'; p.t=0;
-        p.bubble='Сколько стоят?'; p.bubbleT=1.1;
-        Sound.say(p.look.female?'howmuch_f':'howmuch_m', {vol:0.9, rate:rnd(0.94,1.07)});
+        const line = pickLine(p.look.female ? 'ask_f' : 'ask_m');
+        p.bubble = TEXT[line]; p.bubbleT = 1.2;
+        // В толпе из десяти голоса накладываются в кашу: озвучиваем только когда
+        // канал относительно свободен, текст бабла показываем всегда.
+        if(Sound.busy() < 2) Sound.say(line, {vol:0.9, rate:rnd(0.94,1.07)});
       }
       break;
 
@@ -685,8 +771,9 @@ function updateCustomer(p, dt){
     case 'reach':
       if(p.t >= p.grab){          // не успел — рука дошла до травы
         p.state='withdraw'; p.t=0;
-        p.bubble='Ну ты чё? Аккуратнее!'; p.bubbleT=1.4;
-        Sound.say('careful', {vol:0.95, rate:rnd(0.95,1.06)});
+        const line = pickLine(p.look.female ? 'miss_f' : 'miss_m');
+        p.bubble = TEXT[line]; p.bubbleT = 1.5;
+        Sound.say(line, {vol:0.95, rate:rnd(0.95,1.06)});
         Sound.buzz();
         addScore(G.diff.missPts);
         pop(p.laneX, counterY()-H*0.16, `${G.diff.missPts}`, '#ff6b6b');
@@ -700,10 +787,6 @@ function updateCustomer(p, dt){
       break;
 
     case 'chopped':
-      if(p.t>0.8 && !p.saidOrder){
-        p.saidOrder = true;
-        Sound.say('order', {vol:1.0});
-      }
       if(p.t>1.5){ p.state='leave'; p.t=0; }
       break;
 
@@ -724,8 +807,7 @@ function updateThief(p, dt){
           G.bundles--;                 // пучок в руках вора; вернётся, если попадём
           p.carrying = true;
         }
-        p.bubble='Держи его!'; p.bubbleT=1.3;
-        Sound.say('stop_thief', {vol:1.0});
+        shout('grab');
       }
       break;
 
@@ -743,6 +825,7 @@ function updateThief(p, dt){
         addScore(G.diff.thiefEscPts);
         pop(personGeom(p).x, feetAt(0)-H*0.06, `${G.diff.thiefEscPts}`, '#ff6b6b');
         Sound.buzz();
+        shout('esc');
         G.stats.thievesEscaped++; G.stats.stolen++;
         if(G.bundles===0) checkOutOfStock();
       }
@@ -761,9 +844,12 @@ function updateThief(p, dt){
 function personGeom(p){
   const z = p.z;
   const sc = scaleAt(z);
-  const h  = heightAt(z)*p.look.tall;
+  const hFull = heightAt(z)*p.look.tall;
+  const h  = hFull*(p.sizeK||1);
   const x  = lerp(p.fromX, p.laneX, easeOut(z));
-  const feet = feetAt(z);
+  // Мелкий масштаб толпы отсчитываем от ЛИНИИ ГОЛОВЫ, а не от ног: иначе фигура
+  // уменьшается вниз и тонет за прилавком, оставляя на виду одну макушку.
+  const feet = feetAt(z) - (hFull - h)*0.90;
   return {
     x, feet, h, sc,
     shoulderY: feet - h*0.79,
@@ -829,7 +915,7 @@ function chopHand(p, hp){
 
   Sound.swish();
   setTimeout(()=>Sound.chop(), 60);
-  Sound.say('hands_off', {vol:1.0});
+  shout('chop');
   Sound.cash();
 
   G.slashes.push({x:hp.x, y:hp.y, a:rnd(-0.7,0.7), age:0, life:0.26, len:Math.max(90,hp.g.h*0.7)});
@@ -864,6 +950,7 @@ function throwKnife(p, tx, ty){
       p.state='down'; p.fallT=0; p.knifeIn=true;
       addScore(G.diff.thiefPts);
       pop(tx, ty-H*0.04, `+${G.diff.thiefPts}`, '#8ff08a');
+      shout('stab');
       G.stats.thievesPunished++;
       if(p.carrying){ G.bundles++; p.carrying=false; }   // пучок вернулся на прилавок
     },
@@ -896,8 +983,35 @@ function draw(){
   drawBlood();
   drawKnives();
   drawSlashes();
-  for(const p of sorted) drawBubble(p);
+  // Баблов на экране не больше четырёх: вдевятером они перекрывают друг друга
+  // и не читается ни один. Показываем самые свежие — они и есть новости.
+  sorted.filter(p=>p.bubble && p.bubbleT>0)
+        .sort((a,b)=>b.bubbleT-a.bubbleT)
+        .slice(0,4)
+        .forEach(drawBubble);
   drawPops();
+  drawShout();
+}
+
+// Крик продавца — плашка над прилавком. Своей фигуры у игрока на сцене нет,
+// вешать бабл не на кого, поэтому его голос идёт субтитром.
+function drawShout(yOverride){
+  const s = G.shout;
+  if(!s || s.age >= s.life || !s.text) return;
+  const k = 1 - s.age/s.life;
+  ctx.save();
+  ctx.globalAlpha = clamp(k*2.2, 0, 1);
+  const fs = Math.max(15, Math.min(H*0.052, W*0.045));
+  ctx.font = `800 ${fs}px "PT Sans",Verdana,sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const y = (yOverride !== undefined) ? yOverride
+                                    : counterY() + H*0.028 + (1-k)*H*0.012;
+  ctx.lineWidth = Math.max(4, fs*0.22); ctx.strokeStyle='#160f0a';
+  ctx.lineJoin='round';
+  ctx.strokeText(s.text, W*0.5, y);
+  ctx.fillStyle='#ffe08a';
+  ctx.fillText(s.text, W*0.5, y);
+  ctx.restore();
 }
 
 function drawBackground(){
@@ -1410,8 +1524,16 @@ function drawPops(){
    ═════════════════════════════════════════════════════════════════════ */
 function updateFinale(dt){
   G.finaleT += dt;
+  if(G.shout && G.shout.age<G.shout.life) G.shout.age += dt;
+  const held = G.finaleT < (G.finaleHold||0);   // продавец ещё говорит
+
   if(G.outcome==='win'){
-    if(Math.random() < dt*3.2) launchFirework();
+    if(!held && !G.musicStarted){
+      G.musicStarted = true;
+      Sound.playMusic('fireworks');
+      for(let i=0;i<4;i++) setTimeout(launchFirework, i*220);
+    }
+    if(!held && Math.random() < dt*3.2) launchFirework();
     for(const f of G.fireworks){
       f.age+=dt;
       for(const s of f.sparks){
@@ -1424,22 +1546,19 @@ function updateFinale(dt){
       c.t+=dt;
       c.y = c.baseY + Math.sin(c.t*1.6+c.ph)*H*0.004;
     }
-    // Каркают трижды, каждый раз случайная запись из пула (см. CROWS).
-    if(G.finaleT>1.0 && !G.crowSaid){ G.crowSaid=true; cawOnce(0.9); }
-    if(G.finaleT>4.2 && !G.crowSaid2){ G.crowSaid2=true; cawOnce(0.62); }
-    if(G.finaleT>7.6 && !G.crowSaid3){ G.crowSaid3=true; cawOnce(0.5); }
+    // Каркают трижды, каждый раз случайная запись из пула — но только после
+    // того, как продавец договорит «Я разорён».
+    const t = G.finaleT - (G.finaleHold||0);
+    if(t>0.2 && !G.crowSaid){ G.crowSaid=true; cawOnce(0.9); }
+    if(t>3.4 && !G.crowSaid2){ G.crowSaid2=true; cawOnce(0.62); }
+    if(t>6.8 && !G.crowSaid3){ G.crowSaid3=true; cawOnce(0.5); }
   }
 }
 
-// Пул карканья: crow0 — настоящая серая ворона (Wikimedia, public domain),
-// crow1/crow2 — записи заказчика. Каждый раз тянем случайную, не повторяя подряд.
-const CROWS = ['crow0','crow1','crow2'];
-let lastCrow = -1;
+// Карканье: crow0 — настоящая серая ворона (Wikimedia, public domain),
+// crow1/crow2 — записи заказчика. Тянем случайную, подряд не повторяем.
 function cawOnce(vol){
-  let i = rint(0, CROWS.length-1);
-  if(CROWS.length>1 && i===lastCrow) i = (i+1)%CROWS.length;
-  lastCrow = i;
-  Sound.play(CROWS[i], {vol, rate:rnd(0.93,1.07)});
+  Sound.play(pickLine('crow'), {vol, rate:rnd(0.93,1.07)});
 }
 
 function launchFirework(){
@@ -1457,6 +1576,7 @@ function launchFirework(){
 
 function drawFinale(){
   if(G.outcome==='win') drawWinScene(); else drawLoseScene();
+  drawShout(H*0.30);   // произнесённую фразу надо и прочитать
 }
 
 function drawWinScene(){
@@ -1638,7 +1758,8 @@ function startGame(diffKey){
   G.pops.length=0; G.knives.length=0; G.slashes.length=0;
   G.fireworks.length=0; G.crows.length=0;
   G.spawnTimer=0.8; G.customersSpawned=0; G.sinceThief=0;
-  G.outcome=null; G.finaleT=0;
+  G.outcome=null; G.finaleT=0; G.finaleHold=0; G.musicStarted=false;
+  G.shout=null; G.lowWarned=false;
   G.crowSaid=false; G.crowSaid2=false; G.crowSaid3=false;
   G.stats=freshStats();
 
@@ -1699,9 +1820,15 @@ function endGame(outcome){
   show('scrShop',false);
   show('scrFinale',true);
 
+  // Сперва фраза продавца, и только когда он договорит — салют или вороны.
+  // Иначе музыка и карканье забивают реплику ровно в момент её произнесения.
+  const finalLine = outcome==='win' ? 'win_line' : 'lose_line';
+  Sound.say(finalLine, {vol:1.0});
+  G.shout = {text: TEXT[finalLine], age:0, life:3.4};
+  G.finaleHold = Sound.dur(finalLine) + 0.25;
+
   if(outcome==='win'){
-    Sound.playMusic('fireworks');
-    for(let i=0;i<4;i++) setTimeout(launchFirework, i*220);
+    Sound.stopMusic();
   }else{
     Sound.stopMusic();
     G.crows.length=0;

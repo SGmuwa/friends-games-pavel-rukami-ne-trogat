@@ -29,8 +29,18 @@ OUT = ROOT / "ruki-ne-trogat.html"
 
 # Порядок важен только для читаемости итогового файла.
 NAMES = [
-    "hands_off", "order", "careful", "stop_thief", "howmuch_m", "howmuch_f",
-    "crow0", "crow1", "crow2", "fireworks",
+    # реплики продавца при ударе мачете
+    "chop1", "chop2", "chop3", "chop4", "chop5",
+    # покупатель подошёл к прилавку (по полу)
+    "ask_f1", "ask_f2", "ask_m1", "ask_m2",
+    # покупатель успел убрать руку (по полу)
+    "miss_m1", "miss_m2", "miss_f1", "miss_f2",
+    # вор: схватил / получил нож / ушёл
+    "grab1", "grab2", "grab3", "stab1", "stab2", "esc1", "esc2",
+    # склад
+    "low1", "low2", "stock_out",
+    # финал
+    "win_line", "lose_line", "crow0", "crow1", "crow2", "fireworks",
 ]
 
 MARKER = "/*__AUDIO__*/{}"
