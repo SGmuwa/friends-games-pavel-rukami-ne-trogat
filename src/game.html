@@ -1,0 +1,1816 @@
+<!DOCTYPE html>
+<!--
+  «Руками не трогать!» — браузерная аркада.
+  SPDX-License-Identifier: AGPL-3.0-or-later
+
+  Copyright (C) 2026 Павел Сидоренко (основной правообладатель),
+                     Михаил Сидоренко, Ольга Сидоренко
+
+  Эта программа — свободное программное обеспечение: вы можете распространять
+  её и/или изменять на условиях GNU Affero General Public License, изданной
+  Фондом свободного программного обеспечения, либо версии 3 этой лицензии,
+  либо (по вашему выбору) любой более поздней версии.
+
+  Программа распространяется в надежде, что она будет полезной, но БЕЗ КАКИХ
+  БЫ ТО НИ БЫЛО ГАРАНТИЙ, в том числе без подразумеваемых гарантий ТОВАРНОГО
+  СОСТОЯНИЯ и ПРИГОДНОСТИ ДЛЯ ОПРЕДЕЛЁННОЙ ЦЕЛИ. Подробности — в тексте
+  GNU Affero General Public License (файл LICENSE).
+
+  Копия GNU AGPL должна поставляться вместе с программой; если нет —
+  см. <https://www.gnu.org/licenses/>.
+
+  Медиафайлы (озвучка в audio-video/) — CC BY-SA 4.0, см. файл LICENSE-ASSETS.
+-->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Руками не трогать!</title>
+<style>
+  :root{
+    --ink:#1b1410;
+    --paper:#e8dcc0;
+    --blood:#b3161b;
+    --herb:#3f8f3a;
+    --wood:#6b543c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#100c09;
+    font-family:"PT Sans","Trebuchet MS",Verdana,sans-serif;color:var(--paper);
+    -webkit-user-select:none;user-select:none;touch-action:manipulation}
+  #wrap{position:fixed;inset:0}
+  canvas{display:block;width:100%;height:100%;cursor:crosshair}
+
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:14px;padding:20px;
+    background:rgba(12,9,7,.86);backdrop-filter:blur(3px);z-index:10;overflow:auto}
+  .hidden{display:none !important}
+  .panel{max-width:560px;width:100%;background:#221913;border:3px solid #4a3a28;
+    border-radius:14px;padding:22px 20px;text-align:center;
+    box-shadow:0 18px 50px rgba(0,0,0,.6)}
+  h1{margin:0 0 4px;font-size:clamp(24px,6vw,40px);letter-spacing:.5px;color:#f2e6c8;
+    text-shadow:2px 3px 0 #000}
+  h1 .red{color:var(--blood)}
+  h2{margin:0 0 10px;font-size:clamp(18px,4.4vw,26px);color:#f2e6c8}
+  p.lead{margin:6px 0 14px;font-size:15px;line-height:1.45;color:#c9b795}
+  button{font:inherit;font-weight:700;font-size:16px;padding:12px 18px;border-radius:10px;
+    border:2px solid #7d6340;background:#3a2c1f;color:#f2e6c8;cursor:pointer;
+    transition:transform .06s,background .12s}
+  button:hover{background:#4c3927}
+  button:active{transform:translateY(2px)}
+  button.primary{background:var(--blood);border-color:#e0575b}
+  button.primary:hover{background:#cf2026}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .diffbtn{flex:1 1 150px;text-align:left;line-height:1.35}
+  .diffbtn b{display:block;font-size:17px;margin-bottom:3px}
+  .diffbtn span{font-weight:400;font-size:12.5px;color:#c0ad8c}
+
+  table.stats{width:100%;border-collapse:collapse;margin:8px 0 14px;font-size:15px}
+  table.stats td{padding:6px 8px;border-bottom:1px solid #3a2c1f;text-align:left}
+  table.stats td:last-child{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  table.stats tr.total td{border-top:2px solid #7d6340;border-bottom:none;
+    font-size:19px;padding-top:10px;color:#f7d76a}
+
+  #hud{position:absolute;top:0;left:0;right:0;display:flex;gap:10px;align-items:center;
+    padding:8px 10px;font-weight:700;font-size:clamp(13px,3.4vw,17px);z-index:5;
+    text-shadow:1px 2px 0 #000;pointer-events:none}
+  #hud .box{background:rgba(20,14,10,.62);border:2px solid #4a3a28;border-radius:9px;
+    padding:5px 10px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #hud .spacer{flex:1}
+  #hud button{pointer-events:auto;padding:6px 11px;font-size:15px}
+  .low{color:#ff6b6b}
+  /* Узкий экран телефона: иначе кнопка «Лавка» уезжает за правый край */
+  @media (max-width:560px){
+    #hud{gap:5px;padding:6px 6px}
+    #hud .box{padding:4px 7px;font-size:12.5px;border-width:1.5px}
+    #hud button{padding:5px 8px;font-size:13px}
+  }
+  @media (max-width:380px){
+    #hud .box{padding:3px 5px;font-size:11px}
+    #hud button{padding:4px 6px;font-size:12px}
+  }
+  #shopInfo{margin:10px 0;font-size:16px;line-height:1.6}
+  .kbd{display:inline-block;background:#3a2c1f;border:1px solid #7d6340;border-radius:5px;
+    padding:1px 6px;font-size:13px}
+  .credits{margin-top:12px;font-size:11.5px;color:#8b7c62;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="box">Очки: <span id="hudScore">0</span></div>
+    <div class="box">Пучки: <span id="hudBundles">10</span></div>
+    <div class="box">Смена: <span id="hudTime">5:00</span></div>
+    <div class="spacer"></div>
+    <button id="btnSound" title="Звук">🔊</button>
+    <button id="btnShop">Лавка</button>
+  </div>
+
+  <!-- ЭКРАН: МЕНЮ -->
+  <div class="overlay" id="scrMenu">
+    <div class="panel">
+      <h1>РУКАМИ <span class="red">НЕ ТРОГАТЬ!</span></h1>
+      <p class="lead">
+        Ты за прилавком с лекарственными травами. Покупатели тянут руки к товару —
+        руби мачете. Воры хватают пучки и убегают — метай нож в спину.<br>
+        <b>Тапай или кликай прямо по руке и по спине.</b><br>
+        Отрубил руку — пучок продан. Прозевал — пучок испорчен.
+        Пучки кончились — смена сорвана.
+      </p>
+      <p class="lead"><b>Смена длится 5 минут. Выбери уровень:</b></p>
+      <div class="row">
+        <button class="diffbtn" data-diff="easy"><b>Ученик знахаря</b>
+          <span>15 пучков, пучок 50, руки медленные</span></button>
+        <button class="diffbtn" data-diff="normal"><b>Знахарь</b>
+          <span>10 пучков, пучок 100, руки бойкие</span></button>
+        <button class="diffbtn" data-diff="hard"><b>Мясник</b>
+          <span>8 пучков, пучок 120, руки молниеносные</span></button>
+      </div>
+      <p class="lead" id="bestLine" style="margin-top:14px"></p>
+      <div class="credits">
+        Голоса записаны специально для игры. Одно из карканий — запись серой вороны
+        (Oona Räisänen, Wikimedia Commons, public domain).
+        Музыка финала — увертюра «1812» П. И. Чайковского в исполнении
+        United States Marine Band (public domain).
+      </div>
+    </div>
+  </div>
+
+  <!-- ЭКРАН: ЛАВКА (ПАУЗА) -->
+  <div class="overlay hidden" id="scrShop">
+    <div class="panel">
+      <h2>🌿 Лавка</h2>
+      <p class="lead" id="shopReason">Игра на паузе. Таймер смены стоит.</p>
+      <div id="shopInfo"></div>
+      <div class="row">
+        <button id="buy1">Купить 1</button>
+        <button id="buy5">Купить 5</button>
+        <button id="buyMax">Купить сколько влезет</button>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="primary" id="btnResume">За прилавок!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ЭКРАН: ФИНАЛЬНАЯ КАРТИНКА (рисуется на канве, тут только кнопка) -->
+  <div class="overlay hidden" id="scrFinale" style="background:transparent;backdrop-filter:none;
+       justify-content:flex-end;padding-bottom:26px">
+    <button class="primary" id="btnStats">Показать итоги смены</button>
+  </div>
+
+  <!-- ЭКРАН: СТАТИСТИКА -->
+  <div class="overlay hidden" id="scrStats">
+    <div class="panel">
+      <h2 id="statsTitle"></h2>
+      <p class="lead" id="statsSub"></p>
+      <table class="stats" id="statsTable"></table>
+      <div class="row">
+        <button class="primary" id="btnAgain">Ещё смена</button>
+        <button id="btnMenu">В меню</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ═════════════════════════════════════════════════════════════════════
+   1. БАЛАНС.  Правишь сложность — правишь ТОЛЬКО эту таблицу.
+   Инвариант: price < sell, иначе каждая продажа убыточна и смерть
+   неизбежна при любом скилле (пучок тратится и на продаже, и на промахе).
+   ═════════════════════════════════════════════════════════════════════ */
+const DIFFICULTY = {
+  easy: {
+    key:'easy', name:'Ученик знахаря',
+    grab:[0.80, 2.00],      // окно на удар по руке, секунды
+    flee:[1.60, 2.40],      // окно на бросок ножа в вора
+    startBundles:15, price:50,
+    sell:150, missPts:-50, thiefPts:150, thiefEscPts:-100,
+    thiefEvery:6,           // вор после каждого N-го покупателя
+    spawn:[2.4, 1.15],      // интервал спавна: начало смены → конец
+  },
+  normal: {
+    key:'normal', name:'Знахарь',
+    grab:[0.50, 2.00], flee:[1.40, 2.20],
+    startBundles:10, price:100,
+    sell:150, missPts:-50, thiefPts:150, thiefEscPts:-100,
+    thiefEvery:5, spawn:[2.1, 0.95],
+  },
+  hard: {
+    key:'hard', name:'Мясник',
+    grab:[0.35, 1.20], flee:[1.20, 1.80],
+    startBundles:8, price:120,
+    sell:150, missPts:-100, thiefPts:150, thiefEscPts:-150,
+    thiefEvery:4, spawn:[1.8, 0.80],
+  },
+};
+
+const SHIFT_SECONDS = 300;      // 5 минут
+const ASK_TIME      = 0.32;     // «Сколько стоят?» перед тем как потянуть руку
+const MAX_HANGING   = 14;       // сколько пучков влезает на верёвку
+
+/* ═════════════════════════════════════════════════════════════════════
+   2. ЗВУК
+   ═════════════════════════════════════════════════════════════════════ */
+const AUDIO_B64 = /*__AUDIO__*/{};
+
+const Sound = {
+  ctx:null, buf:{}, on:true, ready:false, voices:[], music:null, musicGain:null,
+
+  async init(){
+    if(this.ctx) { if(this.ctx.state==='suspended') await this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return;
+    this.ctx = new AC();
+    if(this.ctx.state==='suspended') await this.ctx.resume();
+    const jobs = Object.entries(AUDIO_B64).map(async ([name, b64])=>{
+      try{
+        const bin = atob(b64);
+        const arr = new Uint8Array(bin.length);
+        for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+        this.buf[name] = await this.ctx.decodeAudioData(arr.buffer);
+      }catch(e){ console.warn('не декодировался звук', name, e); }
+    });
+    await Promise.all(jobs);
+    this.ready = true;
+  },
+
+  play(name, {vol=1, rate=1}={}){
+    if(!this.on || !this.ctx || !this.buf[name]) return null;
+    const s = this.ctx.createBufferSource();
+    s.buffer = this.buf[name];
+    s.playbackRate.value = rate;
+    const g = this.ctx.createGain();
+    g.gain.value = vol;
+    s.connect(g).connect(this.ctx.destination);
+    s.start();
+    return {src:s, gain:g};
+  },
+
+  // Реплики: держим максимум 2 одновременно, чтобы толпа не превращалась в кашу.
+  say(name, opts){
+    const h = this.play(name, opts);
+    if(!h) return;
+    this.voices.push(h);
+    h.src.onended = ()=>{ const i=this.voices.indexOf(h); if(i>=0) this.voices.splice(i,1); };
+    while(this.voices.length>2){
+      const old = this.voices.shift();
+      try{ old.src.stop(); }catch(e){}
+    }
+  },
+
+  playMusic(name){
+    this.stopMusic();
+    const h = this.play(name, {vol:0.85});
+    if(h) this.music = h;
+  },
+  stopMusic(){
+    if(this.music){ try{ this.music.src.stop(); }catch(e){} this.music=null; }
+  },
+
+  /* ---- синтезированные эффекты, файлов не требуют ---- */
+  noiseBuf(dur){
+    const n = Math.floor(this.ctx.sampleRate*dur);
+    const b = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = b.getChannelData(0);
+    for(let i=0;i<n;i++) d[i] = Math.random()*2-1;
+    return b;
+  },
+  // «Вжух» — взмах мачете
+  swish(){
+    if(!this.on||!this.ctx) return;
+    const t=this.ctx.currentTime, s=this.ctx.createBufferSource();
+    s.buffer=this.noiseBuf(0.22);
+    const f=this.ctx.createBiquadFilter(); f.type='bandpass'; f.Q.value=1.6;
+    f.frequency.setValueAtTime(700,t); f.frequency.exponentialRampToValueAtTime(3800,t+0.13);
+    const g=this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.5,t+0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+0.22);
+    s.connect(f).connect(g).connect(this.ctx.destination); s.start(t); s.stop(t+0.24);
+  },
+  // «Фьючь» — свист летящего ножа
+  whistle(){
+    if(!this.on||!this.ctx) return;
+    const t=this.ctx.currentTime, o=this.ctx.createOscillator();
+    o.type='triangle';
+    o.frequency.setValueAtTime(2100,t);
+    o.frequency.exponentialRampToValueAtTime(420,t+0.26);
+    const g=this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.22,t+0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+0.28);
+    o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t+0.3);
+  },
+  // «Чвак» — мачете вошло
+  chop(){
+    if(!this.on||!this.ctx) return;
+    const t=this.ctx.currentTime, s=this.ctx.createBufferSource();
+    s.buffer=this.noiseBuf(0.18);
+    const f=this.ctx.createBiquadFilter(); f.type='lowpass';
+    f.frequency.setValueAtTime(1600,t); f.frequency.exponentialRampToValueAtTime(180,t+0.16);
+    const g=this.ctx.createGain();
+    g.gain.setValueAtTime(0.6,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
+    s.connect(f).connect(g).connect(this.ctx.destination); s.start(t); s.stop(t+0.2);
+    const o=this.ctx.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(120,t); o.frequency.exponentialRampToValueAtTime(45,t+0.15);
+    const g2=this.ctx.createGain();
+    g2.gain.setValueAtTime(0.4,t); g2.gain.exponentialRampToValueAtTime(0.0001,t+0.2);
+    o.connect(g2).connect(this.ctx.destination); o.start(t); o.stop(t+0.22);
+  },
+  // «Дзинь» — касса, пучок продан
+  cash(){
+    if(!this.on||!this.ctx) return;
+    const t=this.ctx.currentTime;
+    [1318,1976].forEach((fr,i)=>{
+      const o=this.ctx.createOscillator(); o.type='sine'; o.frequency.value=fr;
+      const g=this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001,t+i*0.05);
+      g.gain.exponentialRampToValueAtTime(0.2,t+i*0.05+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+i*0.05+0.35);
+      o.connect(g).connect(this.ctx.destination); o.start(t+i*0.05); o.stop(t+i*0.05+0.4);
+    });
+  },
+  // Глухой удар — нож вошёл в спину
+  thud(){
+    if(!this.on||!this.ctx) return;
+    const t=this.ctx.currentTime, o=this.ctx.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(180,t); o.frequency.exponentialRampToValueAtTime(55,t+0.18);
+    const g=this.ctx.createGain();
+    g.gain.setValueAtTime(0.5,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.24);
+    o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t+0.26);
+  },
+  // Штрафной зуммер
+  buzz(){
+    if(!this.on||!this.ctx) return;
+    const t=this.ctx.currentTime, o=this.ctx.createOscillator(); o.type='square';
+    o.frequency.setValueAtTime(180,t); o.frequency.linearRampToValueAtTime(120,t+0.22);
+    const g=this.ctx.createGain();
+    g.gain.setValueAtTime(0.14,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.26);
+    o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t+0.28);
+  },
+  // Разрыв фейерверка
+  boom(){
+    if(!this.on||!this.ctx) return;
+    const t=this.ctx.currentTime, s=this.ctx.createBufferSource();
+    s.buffer=this.noiseBuf(0.5);
+    const f=this.ctx.createBiquadFilter(); f.type='lowpass';
+    f.frequency.setValueAtTime(2400,t); f.frequency.exponentialRampToValueAtTime(160,t+0.45);
+    const g=this.ctx.createGain();
+    g.gain.setValueAtTime(0.35,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.5);
+    s.connect(f).connect(g).connect(this.ctx.destination); s.start(t); s.stop(t+0.52);
+  },
+};
+
+/* ═════════════════════════════════════════════════════════════════════
+   3. МЕЛОЧИ
+   ═════════════════════════════════════════════════════════════════════ */
+const rnd  = (a,b)=> a + Math.random()*(b-a);
+const rint = (a,b)=> Math.floor(rnd(a,b+1));
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+const clamp= (v,a,b)=> v<a?a:(v>b?b:v);
+const lerp = (a,b,t)=> a+(b-a)*t;
+const easeOut = t=> 1-Math.pow(1-t,2);
+
+const SKIN   = ['#e8b98f','#d9a074','#c98a5e','#a9683f','#8a5330','#f0c9a4'];
+const HAIR   = ['#2b2118','#4a3524','#6b4a2a','#8d6a3a','#b9975b','#8d8d8d','#d8d2c4','#a33c1c'];
+const CLOTH  = ['#7a3b3b','#4c5f7a','#5c6b3f','#7a5c33','#6a4a6b','#3f6b64','#8a6a3a','#59493f',
+                '#8c4a2f','#436b45','#5a4a7a','#7d7a52'];
+const ACCENT = ['#c9b184','#3f3128','#a8563f','#4d6b7a','#6b6b4d','#8f7a5c'];
+
+/* ═════════════════════════════════════════════════════════════════════
+   4. СОСТОЯНИЕ ИГРЫ
+   ═════════════════════════════════════════════════════════════════════ */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W=0, H=0, DPR=1;
+
+const G = {
+  mode:'menu',            // menu | play | shop | finale | stats
+  diff:DIFFICULTY.normal,
+  score:0, bundles:10,
+  timeLeft:SHIFT_SECONDS,
+  people:[],              // покупатели и воры
+  blood:[],               // частицы крови
+  splats:[],              // пятна на прилавке
+  debris:[],              // отрубленные руки, выпавшие пучки
+  pops:[],                // всплывающие очки
+  knives:[],              // летящие ножи
+  slashes:[],             // росчерки мачете
+  fireworks:[],
+  crows:[],
+  spawnTimer:1.0,
+  customersSpawned:0,
+  sinceThief:0,
+  outcome:null,           // 'win' | 'lose'
+  finaleT:0,
+  stats:null,
+};
+
+function freshStats(){
+  return {maimed:0, withdrew:0, thievesPunished:0, thievesEscaped:0,
+          sold:0, spoiled:0, stolen:0, bought:0, spent:0};
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   5. ГЕОМЕТРИЯ СЦЕНЫ (псевдо-3D через масштаб)
+   ═════════════════════════════════════════════════════════════════════ */
+const horizonY   = ()=> H*0.44;
+const counterY   = ()=> H*0.72;      // верхняя кромка прилавка
+const ropeY      = ()=> H*0.075;     // верёвка с пучками
+
+// z: 0 — далеко у горизонта, 1 — вплотную к прилавку
+const scaleAt = z => 0.17 + 0.83*Math.pow(z, 1.55);
+const feetAt  = z => horizonY() + (H*0.98 - horizonY())*Math.pow(z, 1.7);
+const heightAt= z => H*0.55*scaleAt(z);
+
+function bundleSlots(){
+  const n = Math.min(G.bundles, MAX_HANGING);
+  const out=[];
+  if(n<=0) return out;
+  const left=W*0.09, right=W*0.91;
+  for(let i=0;i<n;i++){
+    const t = n===1 ? 0.5 : i/(n-1);
+    out.push({x: lerp(left,right,t), y: ropeY() + H*0.015 + (i%2)*H*0.018});
+  }
+  return out;
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   6. ЛЮДИ
+   ═════════════════════════════════════════════════════════════════════ */
+function makeAppearance(){
+  const female = Math.random()<0.5;
+  return {
+    female,
+    skin:  pick(SKIN),
+    hair:  pick(HAIR),
+    coat:  pick(CLOTH),
+    accent:pick(ACCENT),
+    pants: pick(CLOTH),
+    build: rnd(0.85,1.25),
+    tall:  rnd(0.9,1.1),
+    hat:   Math.random()< (female?0.45:0.4)
+             ? (female? pick(['kerchief','kerchief','hat']) : pick(['cap','hat','ushanka']))
+             : 'none',
+    longHair: female ? Math.random()<0.8 : Math.random()<0.12,
+    beard: !female && Math.random()<0.4,
+    glasses: Math.random()<0.18,
+    bagHand: Math.random()<0.35,
+  };
+}
+
+function spawnCustomer(){
+  const d = G.diff;
+  const grab = rnd(d.grab[0], d.grab[1]);
+  // Походка выдаёт хватку: кто быстро хватает — быстро и подходит.
+  const tNorm = (grab - d.grab[0]) / Math.max(0.001, d.grab[1]-d.grab[0]);
+  const approach = lerp(0.95, 2.6, tNorm);
+
+  const laneX = rnd(W*0.16, W*0.84);
+  const fromX = lerp(W*0.5, laneX, 0.25) + rnd(-W*0.06, W*0.06);
+
+  G.people.push({
+    kind:'customer', state:'approach', t:0,
+    approach, grab, ask:ASK_TIME,
+    z:0, laneX, fromX,
+    look: makeAppearance(),
+    arm: Math.random()<0.5 ? -1 : 1,   // какой рукой тянется
+    targetSlot:null,
+    bubble:null, bubbleT:0,
+    dead:false, leave:0,
+    handChopped:false, stumpBlood:0,
+  });
+  G.customersSpawned++;
+  G.sinceThief++;
+}
+
+function spawnThief(){
+  const d = G.diff;
+  const laneX = rnd(W*0.20, W*0.80);
+  G.people.push({
+    kind:'thief', state:'run', t:0,
+    approach: rnd(0.7,0.95),
+    flee: rnd(d.flee[0], d.flee[1]),
+    z:0, laneX, fromX: lerp(W*0.5, laneX, 0.3),
+    look: makeAppearance(),
+    bubble:null, bubbleT:0,
+    stabbed:false, dead:false, leave:0, fallT:0,
+  });
+  G.sinceThief = 0;
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   7. ЭФФЕКТЫ
+   ═════════════════════════════════════════════════════════════════════ */
+function bloodBurst(x,y,scale,amount,dir){
+  for(let i=0;i<amount;i++){
+    const a = dir!==undefined ? dir + rnd(-0.9,0.9) : rnd(0,Math.PI*2);
+    const sp = rnd(60,420)*Math.max(0.45,scale);
+    G.blood.push({
+      x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp - rnd(30,160)*scale,
+      r: rnd(2,7)*Math.max(0.5,scale), life:rnd(0.5,1.4), age:0,
+    });
+  }
+}
+function addSplat(x,y,r){
+  G.splats.push({x,y,r,age:0,life:14, seed:Math.random()*99});
+  if(G.splats.length>70) G.splats.shift();
+}
+function pop(x,y,text,color){
+  G.pops.push({x,y,text,color,age:0,life:1.2});
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   8. ОЧКИ И ПУЧКИ
+   ═════════════════════════════════════════════════════════════════════ */
+function addScore(n){ G.score += n; }
+
+function loseBundle(reason){
+  G.bundles = Math.max(0, G.bundles-1);
+  if(G.bundles===0) checkOutOfStock();
+}
+function checkOutOfStock(){
+  if(G.bundles>0 || G.mode!=='play') return;
+  if(G.score >= G.diff.price){
+    openShop('Товар кончился! Закупись, иначе смена сорвана.');
+  }else{
+    endGame('lose');
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   9. ОБНОВЛЕНИЕ
+   ═════════════════════════════════════════════════════════════════════ */
+function update(dt){
+  if(G.mode==='finale'){ updateFinale(dt); return; }
+  if(G.mode!=='play') return;
+
+  G.timeLeft -= dt;
+  if(G.timeLeft<=0){ G.timeLeft=0; endGame('win'); return; }
+
+  const prog = 1 - G.timeLeft/SHIFT_SECONDS;       // 0 → 1 за смену
+  const maxActive = 1 + Math.floor(prog*2.999);    // 1 → 3 покупателя
+  const d = G.diff;
+
+  // ---- спавн
+  G.spawnTimer -= dt;
+  if(G.spawnTimer<=0){
+    const live = G.people.filter(p=>p.kind==='customer' && !p.dead && p.state!=='leave').length;
+    if(live < maxActive){
+      if(G.sinceThief >= d.thiefEvery && G.bundles>0) spawnThief();
+      else spawnCustomer();
+    }
+    G.spawnTimer = lerp(d.spawn[0], d.spawn[1], prog) * rnd(0.75,1.25);
+  }
+
+  // ---- люди
+  for(const p of G.people){
+    p.t += dt;
+    if(p.bubbleT>0) p.bubbleT -= dt;
+    if(p.stumpBlood>0) p.stumpBlood -= dt;
+
+    if(p.kind==='customer') updateCustomer(p, dt);
+    else updateThief(p, dt);
+  }
+  G.people = G.people.filter(p=>!p.dead);
+
+  // ---- частицы
+  for(const b of G.blood){
+    b.age+=dt; b.vy += 900*dt; b.x += b.vx*dt; b.y += b.vy*dt;
+    if(b.y > counterY() && b.vy>0 && Math.random()<0.35){
+      addSplat(b.x, counterY()+rnd(0,H*0.06), b.r*rnd(1.2,2.4));
+      b.age = b.life;
+    }
+  }
+  G.blood = G.blood.filter(b=>b.age<b.life);
+  for(const s of G.splats) s.age+=dt;
+  G.splats = G.splats.filter(s=>s.age<s.life);
+
+  for(const d2 of G.debris){
+    d2.age+=dt; d2.vy+=1200*dt; d2.x+=d2.vx*dt; d2.y+=d2.vy*dt; d2.rot+=d2.spin*dt;
+    if(d2.y>H*1.1) d2.age=d2.life;
+  }
+  G.debris = G.debris.filter(x=>x.age<x.life);
+
+  for(const p of G.pops){ p.age+=dt; p.y -= 46*dt; }
+  G.pops = G.pops.filter(p=>p.age<p.life);
+
+  for(const s of G.slashes) s.age+=dt;
+  G.slashes = G.slashes.filter(s=>s.age<s.life);
+
+  for(const k of G.knives){
+    k.age += dt;
+    if(k.age>=k.life && !k.landed){
+      k.landed = true;
+      if(k.onHit) k.onHit();
+    }
+  }
+  G.knives = G.knives.filter(k=>k.age < k.life + 0.05);
+}
+
+function updateCustomer(p, dt){
+  switch(p.state){
+    case 'approach':
+      p.z = clamp(p.t/p.approach, 0, 1);
+      if(p.z>=1){
+        p.state='ask'; p.t=0;
+        p.bubble='Сколько стоят?'; p.bubbleT=1.1;
+        Sound.say(p.look.female?'howmuch_f':'howmuch_m', {vol:0.9, rate:rnd(0.94,1.07)});
+      }
+      break;
+
+    case 'ask':
+      if(p.t>=p.ask){
+        p.state='reach'; p.t=0;
+        const slots = bundleSlots();
+        p.targetSlot = slots.length
+          ? slots.reduce((a,b)=> Math.abs(b.x-p.laneX)<Math.abs(a.x-p.laneX)?b:a)
+          : {x:p.laneX, y:ropeY()+H*0.05};
+      }
+      break;
+
+    case 'reach':
+      if(p.t >= p.grab){          // не успел — рука дошла до травы
+        p.state='withdraw'; p.t=0;
+        p.bubble='Ну ты чё? Аккуратнее!'; p.bubbleT=1.4;
+        Sound.say('careful', {vol:0.95, rate:rnd(0.95,1.06)});
+        Sound.buzz();
+        addScore(G.diff.missPts);
+        pop(p.laneX, counterY()-H*0.16, `${G.diff.missPts}`, '#ff6b6b');
+        G.stats.withdrew++; G.stats.spoiled++;
+        loseBundle();
+      }
+      break;
+
+    case 'withdraw':
+      if(p.t>0.55){ p.state='leave'; p.t=0; }
+      break;
+
+    case 'chopped':
+      if(p.t>0.8 && !p.saidOrder){
+        p.saidOrder = true;
+        Sound.say('order', {vol:1.0});
+      }
+      if(p.t>1.5){ p.state='leave'; p.t=0; }
+      break;
+
+    case 'leave':
+      p.z -= dt/1.1;
+      if(p.z<=0) p.dead=true;
+      break;
+  }
+}
+
+function updateThief(p, dt){
+  switch(p.state){
+    case 'run':
+      p.z = clamp(p.t/p.approach, 0, 1);
+      if(p.z>=1){
+        p.state='grab'; p.t=0;
+        if(G.bundles>0){
+          G.bundles--;                 // пучок в руках вора; вернётся, если попадём
+          p.carrying = true;
+        }
+        p.bubble='Держи его!'; p.bubbleT=1.3;
+        Sound.say('stop_thief', {vol:1.0});
+      }
+      break;
+
+    case 'grab':
+      if(p.t>0.28){ p.state='flee'; p.t=0; }
+      break;
+
+    case 'flee':
+      // Нож уже в полёте — вор замирает, иначе он успевал бы «уйти» за 0.17 с
+      // полёта и игрок получал бы и награду, и штраф за одного вора.
+      if(p.stabbed) break;
+      p.z = clamp(1 - p.t/p.flee, 0, 1);
+      if(p.z<=0){                       // ушёл
+        p.dead = true;
+        addScore(G.diff.thiefEscPts);
+        pop(personGeom(p).x, feetAt(0)-H*0.06, `${G.diff.thiefEscPts}`, '#ff6b6b');
+        Sound.buzz();
+        G.stats.thievesEscaped++; G.stats.stolen++;
+        if(G.bundles===0) checkOutOfStock();
+      }
+      break;
+
+    case 'down':
+      p.fallT += dt;
+      if(p.fallT>2.2) p.dead=true;
+      break;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   10. ПОЗИЦИИ ЧАСТЕЙ ТЕЛА
+   ═════════════════════════════════════════════════════════════════════ */
+function personGeom(p){
+  const z = p.z;
+  const sc = scaleAt(z);
+  const h  = heightAt(z)*p.look.tall;
+  const x  = lerp(p.fromX, p.laneX, easeOut(z));
+  const feet = feetAt(z);
+  return {
+    x, feet, h, sc,
+    shoulderY: feet - h*0.79,
+    hipY:      feet - h*0.44,
+    headY:     feet - h*0.90,
+    headR:     h*0.095,
+    bodyW:     h*0.185*p.look.build,
+  };
+}
+
+// Точка кисти тянущейся руки
+function handPos(p){
+  const g = personGeom(p);
+  const sx = g.x + g.bodyW*0.55*p.arm;
+  const sy = g.shoulderY + g.h*0.04;
+  if(p.state!=='reach' || !p.targetSlot) return {x:sx, y:sy, g};
+  const t = easeOut(clamp(p.t/p.grab, 0, 1));
+  return {
+    x: lerp(sx, p.targetSlot.x, t),
+    y: lerp(sy, p.targetSlot.y + H*0.03, t),
+    g,
+  };
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   11. КЛИК / ТАП
+   ═════════════════════════════════════════════════════════════════════ */
+function onPoint(px, py){
+  if(G.mode!=='play') return;
+
+  // 1) рука тянущегося покупателя
+  let best=null, bestD=1e9;
+  for(const p of G.people){
+    if(p.kind!=='customer' || p.state!=='reach' || p.handChopped) continue;
+    const hp = handPos(p);
+    const r = Math.max(20, hp.g.h*0.13);
+    const d = Math.hypot(px-hp.x, py-hp.y);
+    if(d<r && d<bestD){ bestD=d; best={p, hp, r}; }
+  }
+  if(best){ chopHand(best.p, best.hp); return; }
+
+  // 2) спина убегающего вора
+  let bt=null, btD=1e9;
+  for(const p of G.people){
+    if(p.kind!=='thief' || p.state!=='flee' || p.stabbed) continue;
+    const g = personGeom(p);
+    const cx = g.x, cy = (g.shoulderY+g.hipY)/2;
+    const r = Math.max(18, g.bodyW*0.95);
+    const d = Math.hypot(px-cx, py-cy);
+    if(d<r*1.25 && d<btD){ btD=d; bt={p,g,cx,cy}; }
+  }
+  if(bt){ throwKnife(bt.p, bt.cx, bt.cy); return; }
+
+  // 3) промах — просто росчерк, без штрафа
+  G.slashes.push({x:px, y:py, a:rnd(-0.5,0.5), age:0, life:0.22, len:Math.max(60,H*0.1)});
+  Sound.swish();
+}
+
+function chopHand(p, hp){
+  p.handChopped = true;
+  p.state='chopped'; p.t=0; p.stumpBlood=1.4;
+  p.bubble=null;
+
+  Sound.swish();
+  setTimeout(()=>Sound.chop(), 60);
+  Sound.say('hands_off', {vol:1.0});
+  Sound.cash();
+
+  G.slashes.push({x:hp.x, y:hp.y, a:rnd(-0.7,0.7), age:0, life:0.26, len:Math.max(90,hp.g.h*0.7)});
+  bloodBurst(hp.x, hp.y, hp.g.sc, 34);
+  addSplat(hp.x, counterY()+rnd(0, H*0.05), hp.g.h*0.09);
+
+  G.debris.push({
+    type:'hand', x:hp.x, y:hp.y,
+    vx: rnd(-160,160), vy: rnd(-420,-220),
+    rot: rnd(0,6.28), spin: rnd(-9,9),
+    size: hp.g.h*0.11, skin:p.look.skin, age:0, life:2.6,
+  });
+
+  addScore(G.diff.sell);
+  pop(hp.x, hp.y-H*0.04, `+${G.diff.sell}`, '#8ff08a');
+  G.stats.maimed++; G.stats.sold++;
+  loseBundle();
+}
+
+function throwKnife(p, tx, ty){
+  p.stabbed = true;
+  Sound.whistle();
+  const from = {x:W*0.5, y:H*1.02};
+  G.knives.push({
+    x0:from.x, y0:from.y, x1:tx, y1:ty,
+    age:0, life:0.17, landed:false,
+    onHit:()=>{
+      Sound.thud();
+      const g = personGeom(p);
+      bloodBurst(tx, ty, g.sc, 30, -Math.PI/2);
+      addSplat(tx, ty+g.h*0.1, g.h*0.08);
+      p.state='down'; p.fallT=0; p.knifeIn=true;
+      addScore(G.diff.thiefPts);
+      pop(tx, ty-H*0.04, `+${G.diff.thiefPts}`, '#8ff08a');
+      G.stats.thievesPunished++;
+      if(p.carrying){ G.bundles++; p.carrying=false; }   // пучок вернулся на прилавок
+    },
+  });
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   12. ОТРИСОВКА
+   ═════════════════════════════════════════════════════════════════════ */
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawBackground();
+
+  if(G.mode==='finale'){ drawFinale(); return; }
+
+  // Дальние — первыми, ближние — поверх
+  const sorted = [...G.people].sort((a,b)=>a.z-b.z);
+  const behind = sorted.filter(p=> p.kind==='thief' && p.state==='down' ? false : true);
+
+  for(const p of behind) drawPerson(p);
+
+  drawCounter();
+  drawHangingBundles();
+
+  // упавшие воры рисуются поверх прилавка, чтобы кровь была видна
+  for(const p of sorted) if(p.kind==='thief' && p.state==='down') drawPerson(p);
+
+  drawSplats();
+  for(const d of G.debris) drawDebris(d);
+  drawBlood();
+  drawKnives();
+  drawSlashes();
+  for(const p of sorted) drawBubble(p);
+  drawPops();
+}
+
+function drawBackground(){
+  // небо/стена рынка
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#2a2118');
+  g.addColorStop(0.36,'#4a3d2c');
+  g.addColorStop(0.62,'#5c4c36');
+  g.addColorStop(1,'#332a1e');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  // дальние палатки
+  const hy = horizonY();
+  ctx.save();
+  ctx.globalAlpha=0.42;
+  for(let i=0;i<7;i++){
+    const x = W*(0.02+i*0.145), w = W*0.115, h = H*(0.10+((i*37)%5)*0.012);
+    ctx.fillStyle = i%2 ? '#463a29' : '#3a3226';
+    ctx.fillRect(x, hy-h, w, h);
+    ctx.fillStyle = i%2 ? '#6a4a3a' : '#5a4a34';
+    ctx.beginPath();
+    ctx.moveTo(x-W*0.012, hy-h);
+    ctx.lineTo(x+w/2, hy-h-H*0.035);
+    ctx.lineTo(x+w+W*0.012, hy-h);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+
+  // пол
+  ctx.fillStyle='#3b3022';
+  ctx.fillRect(0,hy,W,H-hy);
+  ctx.save(); ctx.globalAlpha=0.18; ctx.strokeStyle='#000'; ctx.lineWidth=2;
+  for(let i=0;i<=12;i++){
+    const t=i/12;
+    ctx.beginPath();
+    ctx.moveTo(W*0.5, hy);
+    ctx.lineTo(lerp(-W*0.6, W*1.6, t), H);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCounter(){
+  const cy = counterY();
+  // столешница
+  ctx.fillStyle='#7a6144';
+  ctx.beginPath();
+  ctx.moveTo(-W*0.02, cy);
+  ctx.lineTo(W*1.02, cy);
+  ctx.lineTo(W*1.02, cy+H*0.055);
+  ctx.lineTo(-W*0.02, cy+H*0.055);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#3d3022'; ctx.lineWidth=Math.max(2,H*0.005); ctx.stroke();
+
+  // передняя стенка с досками
+  ctx.fillStyle='#5b4732';
+  ctx.fillRect(-W*0.02, cy+H*0.055, W*1.04, H);
+  ctx.strokeStyle='#463522'; ctx.lineWidth=Math.max(1.5,H*0.003);
+  const planks = 11;
+  for(let i=1;i<planks;i++){
+    const x = W*(i/planks);
+    ctx.beginPath(); ctx.moveTo(x, cy+H*0.055); ctx.lineTo(x, H); ctx.stroke();
+  }
+  // блик
+  ctx.save(); ctx.globalAlpha=0.16; ctx.fillStyle='#fff5d0';
+  ctx.fillRect(-W*0.02, cy, W*1.04, H*0.012);
+  ctx.restore();
+}
+
+function drawHangingBundles(){
+  const slots = bundleSlots();
+  const ry = ropeY();
+  // верёвка
+  ctx.strokeStyle='#8a7350'; ctx.lineWidth=Math.max(2,H*0.005);
+  ctx.beginPath();
+  ctx.moveTo(0, ry);
+  ctx.quadraticCurveTo(W*0.5, ry+H*0.022, W, ry);
+  ctx.stroke();
+
+  // на узком экране пучки жмутся друг к другу — уменьшаем, чтобы не слипались
+  const bs = Math.min(H*0.075, W*0.075);
+  for(const s of slots) drawBundle(s.x, s.y, bs, true);
+
+  if(G.bundles>MAX_HANGING){
+    ctx.fillStyle='#f2e6c8'; ctx.font=`700 ${Math.max(14,H*0.028)}px sans-serif`;
+    ctx.textAlign='center';
+    ctx.fillText(`+${G.bundles-MAX_HANGING}`, W*0.5, ry+H*0.115);
+  }
+}
+
+// Пучок лекарственной травы — зелёный, перевязанный
+function drawBundle(x, y, size, hanging){
+  ctx.save();
+  ctx.translate(x,y);
+  if(hanging){
+    ctx.strokeStyle='#8a7350'; ctx.lineWidth=Math.max(1.2,size*0.045);
+    ctx.beginPath(); ctx.moveTo(0,-size*0.55); ctx.lineTo(0,-size*0.05); ctx.stroke();
+  }
+  // стебли-листья веером
+  const leaves = 9;
+  for(let i=0;i<leaves;i++){
+    const a = lerp(-0.85, 0.85, i/(leaves-1));
+    const len = size*rnd(0.85,1.0);
+    ctx.strokeStyle = i%3===0 ? '#2f7a2c' : (i%3===1 ? '#46a03f' : '#3a8c36');
+    ctx.lineWidth = Math.max(1.6, size*0.075);
+    ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.quadraticCurveTo(Math.sin(a)*len*0.55, len*0.5, Math.sin(a)*len, len*0.95);
+    ctx.stroke();
+  }
+  // перевязка
+  ctx.fillStyle='#b8452e';
+  ctx.fillRect(-size*0.16, -size*0.06, size*0.32, size*0.14);
+  ctx.restore();
+}
+
+function drawPerson(p){
+  const g = personGeom(p);
+  const L = p.look;
+  const back = (p.kind==='thief' && (p.state==='flee' || p.state==='down' || p.state==='grab'));
+  const down = (p.state==='down');
+
+  ctx.save();
+  if(down){
+    ctx.translate(g.x, g.feet);
+    ctx.rotate(clamp(p.fallT/0.5,0,1)*0.95);
+    ctx.translate(-g.x, -g.feet);
+    ctx.globalAlpha = clamp(1-(p.fallT-1.4)/0.8, 0, 1);
+  }
+  if(p.state==='leave') ctx.globalAlpha = clamp(p.z*1.6, 0, 1);
+
+  const lw = Math.max(1.5, g.h*0.018);
+  ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.strokeStyle='#231a12'; ctx.lineWidth=lw;
+
+  // ноги
+  ctx.fillStyle=L.pants;
+  const legW=g.bodyW*0.34;
+  for(const s of [-1,1]){
+    ctx.beginPath();
+    ctx.roundRect(g.x + s*g.bodyW*0.30 - legW/2, g.hipY, legW, g.feet-g.hipY, legW*0.4);
+    ctx.fill(); ctx.stroke();
+  }
+
+  // торс (пальто)
+  ctx.fillStyle=L.coat;
+  ctx.beginPath();
+  ctx.roundRect(g.x-g.bodyW, g.shoulderY, g.bodyW*2, g.hipY-g.shoulderY+g.h*0.06, g.bodyW*0.35);
+  ctx.fill(); ctx.stroke();
+  // акцент — воротник/пояс
+  ctx.fillStyle=L.accent;
+  ctx.fillRect(g.x-g.bodyW, g.hipY-g.h*0.03, g.bodyW*2, g.h*0.035);
+  if(!back){
+    ctx.beginPath();
+    ctx.moveTo(g.x-g.bodyW*0.32, g.shoulderY);
+    ctx.lineTo(g.x, g.shoulderY+g.h*0.07);
+    ctx.lineTo(g.x+g.bodyW*0.32, g.shoulderY);
+    ctx.fill();
+  }
+
+  // руки, кроме тянущейся — та рисуется поверх всего в конце
+  drawIdleArms(p, g, back);
+
+  // волосы ЗА головой (иначе перекрывают лицо)
+  if(L.longHair){
+    ctx.fillStyle=L.hair;
+    ctx.beginPath();
+    ctx.roundRect(g.x-g.headR*1.12, g.headY-g.headR*1.1, g.headR*2.24, g.headR*2.6, g.headR*0.7);
+    ctx.fill();
+  }
+
+  // голова
+  ctx.fillStyle=L.skin;
+  ctx.beginPath(); ctx.arc(g.x, g.headY, g.headR, 0, 6.2832); ctx.fill(); ctx.stroke();
+
+  // Причёска поверх макушки. Низкая чёлка закрывала бы глаза (они на headY-0.12R),
+  // поэтому нижняя кромка волос держится выше уровня глаз.
+  ctx.fillStyle=L.hair;
+  ctx.beginPath();
+  ctx.ellipse(g.x, g.headY-g.headR*0.38,
+              g.headR*(L.longHair?1.08:1.04), g.headR*0.64, 0, Math.PI, 0);
+  ctx.fill();
+
+  // лицо только спереди
+  if(!back){
+    if(L.beard){
+      ctx.fillStyle=L.hair;
+      ctx.beginPath();
+      ctx.ellipse(g.x, g.headY+g.headR*0.55, g.headR*0.8, g.headR*0.62, 0, 0, Math.PI);
+      ctx.fill();
+    }
+    const eyeY = g.headY - g.headR*0.12, eyeDx = g.headR*0.36;
+    ctx.fillStyle='#1a120c';
+    for(const s of [-1,1]){
+      ctx.beginPath();
+      ctx.arc(g.x+s*eyeDx, eyeY, Math.max(1.1, g.headR*0.13), 0, 6.2832);
+      ctx.fill();
+    }
+    if(L.glasses){
+      ctx.strokeStyle='#2a2018'; ctx.lineWidth=Math.max(1, g.headR*0.09);
+      for(const s of [-1,1]){
+        ctx.beginPath();
+        ctx.arc(g.x+s*eyeDx, eyeY, g.headR*0.28, 0, 6.2832); ctx.stroke();
+      }
+      ctx.strokeStyle='#231a12'; ctx.lineWidth=lw;
+    }
+    // рот — орёт, когда тянется или когда отрубили
+    const mouthY = g.headY + g.headR*0.40;
+    ctx.fillStyle='#5a1414';
+    const open = (p.state==='reach'||p.state==='ask'||p.state==='chopped'||p.state==='withdraw');
+    ctx.beginPath();
+    if(open) ctx.ellipse(g.x, mouthY, g.headR*0.24, g.headR*0.27, 0, 0, 6.2832);
+    else     ctx.ellipse(g.x, mouthY, g.headR*0.26, g.headR*0.08, 0, 0, 6.2832);
+    ctx.fill();
+  }
+
+  // головной убор
+  if(L.hat!=='none') drawHat(g, L, back);
+
+  // вор несёт пучок
+  if(p.kind==='thief' && p.carrying){
+    drawBundle(g.x - g.bodyW*1.15, g.shoulderY + g.h*0.14, g.h*0.13, false);
+  }
+  // нож в спине
+  if(p.knifeIn){
+    drawKnifeStuck(g.x, (g.shoulderY+g.hipY)/2, g.h*0.22);
+  }
+
+  // Тянущаяся рука — поверх головы и туловища: это цель игрока,
+  // она обязана быть видна, даже когда проходит перед лицом.
+  if(p.kind==='customer' && p.state==='reach') drawReachArm(p, g);
+
+  ctx.restore();
+}
+
+function drawHat(g, L, back){
+  const hy = g.headY - g.headR*0.75;
+  ctx.strokeStyle='#231a12'; ctx.lineWidth=Math.max(1.5,g.h*0.018);
+  if(L.hat==='kerchief'){
+    ctx.fillStyle=L.accent;
+    ctx.beginPath();
+    ctx.moveTo(g.x-g.headR*1.15, g.headY+g.headR*0.1);
+    ctx.quadraticCurveTo(g.x, g.headY-g.headR*1.6, g.x+g.headR*1.15, g.headY+g.headR*0.1);
+    ctx.quadraticCurveTo(g.x, g.headY+g.headR*0.45, g.x-g.headR*1.15, g.headY+g.headR*0.1);
+    ctx.fill(); ctx.stroke();
+    if(!back){
+      ctx.beginPath();
+      ctx.moveTo(g.x+g.headR*0.9, g.headY+g.headR*0.1);
+      ctx.lineTo(g.x+g.headR*1.5, g.headY+g.headR*0.75);
+      ctx.lineTo(g.x+g.headR*0.7, g.headY+g.headR*0.5);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+  }else if(L.hat==='cap'){
+    ctx.fillStyle=L.accent;
+    ctx.beginPath();
+    ctx.ellipse(g.x, g.headY-g.headR*0.30, g.headR*1.05, g.headR*0.78, 0, Math.PI, 0);
+    ctx.fill(); ctx.stroke();
+    // козырёк торчит вбок от края тульи, а не поперёк лица
+    ctx.beginPath();
+    ctx.ellipse(g.x+(back?-1:1)*g.headR*1.15, g.headY-g.headR*0.52,
+                g.headR*0.75, g.headR*0.14, 0, 0, 6.2832);
+    ctx.fill(); ctx.stroke();
+  }else if(L.hat==='ushanka'){
+    ctx.fillStyle=L.accent;
+    ctx.beginPath();
+    ctx.roundRect(g.x-g.headR*1.15, hy-g.headR*0.2, g.headR*2.3, g.headR*1.1, g.headR*0.4);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle=L.hair;
+    for(const s of [-1,1]){
+      ctx.beginPath();
+      ctx.roundRect(g.x+s*g.headR*1.15-g.headR*0.3, hy+g.headR*0.5, g.headR*0.6, g.headR*1.1, g.headR*0.25);
+      ctx.fill(); ctx.stroke();
+    }
+  }else{ // hat
+    ctx.fillStyle=L.accent;
+    ctx.beginPath();
+    ctx.ellipse(g.x, hy+g.headR*0.35, g.headR*1.5, g.headR*0.26, 0, 0, 6.2832);
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.roundRect(g.x-g.headR*0.75, hy-g.headR*0.85, g.headR*1.5, g.headR*1.2, g.headR*0.2);
+    ctx.fill(); ctx.stroke();
+  }
+}
+
+// Общий рисовальщик конечности: рукав дугой + кисть
+function limb(g, L, sx, sy, ex, ey, skinHand){
+  const mx=(sx+ex)/2 + (ex-sx)*0.05, my=(sy+ey)/2 + g.h*0.05;
+  ctx.strokeStyle=L.coat;
+  ctx.lineWidth=g.bodyW*0.42;
+  ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(sx,sy);
+  ctx.quadraticCurveTo(mx,my,ex,ey);
+  ctx.stroke();
+  if(skinHand){
+    ctx.fillStyle=L.skin;
+    ctx.beginPath(); ctx.arc(ex,ey,g.bodyW*0.30,0,6.2832); ctx.fill();
+    ctx.strokeStyle='#231a12'; ctx.lineWidth=Math.max(1,g.h*0.014);
+    ctx.stroke();
+  }
+}
+
+// Тянущаяся рука: рисуется последней, поверх фигуры, с пульсирующей меткой цели
+function drawReachArm(p, g){
+  const L=p.look, hp=handPos(p);
+  const shY = g.shoulderY + g.h*0.05;
+  limb(g, L, g.x + g.bodyW*0.75*p.arm, shY, hp.x, hp.y, false);
+
+  const r = Math.max(20, g.h*0.13);
+  ctx.save();
+  ctx.globalAlpha = 0.45+0.3*Math.sin(performance.now()/90);
+  ctx.strokeStyle='#ffd257'; ctx.lineWidth=Math.max(2.5,g.h*0.022);
+  ctx.beginPath(); ctx.arc(hp.x,hp.y,r,0,6.2832); ctx.stroke();
+  ctx.restore();
+
+  // растопыренная пятерня — цель для мачете
+  ctx.fillStyle=L.skin; ctx.strokeStyle='#231a12';
+  ctx.lineWidth=Math.max(1.2,g.h*0.014);
+  const hs=g.bodyW*0.34;
+  ctx.beginPath(); ctx.arc(hp.x,hp.y,hs,0,6.2832); ctx.fill(); ctx.stroke();
+  for(let i=0;i<4;i++){
+    const a=-Math.PI/2 + (i-1.5)*0.42;
+    ctx.beginPath();
+    ctx.lineWidth=hs*0.42; ctx.strokeStyle=L.skin; ctx.lineCap='round';
+    ctx.moveTo(hp.x+Math.cos(a)*hs*0.5, hp.y+Math.sin(a)*hs*0.5);
+    ctx.lineTo(hp.x+Math.cos(a)*hs*1.5, hp.y+Math.sin(a)*hs*1.5);
+    ctx.stroke();
+  }
+}
+
+function drawIdleArms(p, g, back){
+  const L=p.look;
+  const shY = g.shoulderY + g.h*0.05;
+  // Кисти не должны уходить под прилавок — иначе вблизи фигура выглядит безрукой.
+  // Для дальних людей hipY и так выше кромки, и min() ничего не меняет.
+  const restY = Math.min(g.hipY + g.h*0.02, counterY() - g.h*0.05);
+  const drawLimb=(sx,sy,ex,ey,skinHand)=>limb(g,L,sx,sy,ex,ey,skinHand);
+
+  if(p.kind==='customer' && p.state==='reach'){
+    // свободная рука вдоль тела; тянущуюся рисуем позже, поверх всего
+    drawLimb(g.x - g.bodyW*0.75*p.arm, shY,
+             g.x - g.bodyW*1.15*p.arm, restY, true);
+    return;
+  }
+
+  if(p.kind==='customer' && p.handChopped){
+    // культя торчит наружу, из неё хлещет
+    const sx=g.x + g.bodyW*0.75*p.arm;
+    const ex=g.x + g.bodyW*1.75*p.arm;
+    const ey=g.shoulderY + g.h*0.14;
+    drawLimb(sx,shY,ex,ey,false);
+    ctx.fillStyle='#8e1418'; ctx.strokeStyle='#3d0a0c';
+    ctx.lineWidth=Math.max(1.2,g.h*0.012);
+    ctx.beginPath(); ctx.arc(ex,ey,g.bodyW*0.24,0,6.2832); ctx.fill(); ctx.stroke();
+    if(p.stumpBlood>0 && Math.random()<0.8) bloodBurst(ex,ey,g.sc,2,Math.PI/2);
+    drawLimb(g.x - g.bodyW*0.75*p.arm, shY,
+             g.x - g.bodyW*1.15*p.arm, restY, true);
+    return;
+  }
+
+  // обычные руки (в т.ч. вор со спины)
+  for(const s of [-1,1]){
+    let ex=g.x + s*g.bodyW*1.15, ey=restY;
+    if(p.kind==='thief' && (p.state==='flee'||p.state==='run')){
+      const swing=Math.sin(p.t*22 + (s>0?0:Math.PI))*g.h*0.09;
+      ey += swing; ex += s*g.h*0.02;
+    }
+    drawLimb(g.x + s*g.bodyW*0.75, shY, ex, ey, true);
+  }
+}
+
+function drawBubble(p){
+  if(!p.bubble || p.bubbleT<=0) return;
+  const g = personGeom(p);
+  const fs = Math.max(12, Math.min(H*0.032, g.h*0.11));
+  ctx.save();
+  ctx.font=`700 ${fs}px "PT Sans",Verdana,sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const tw = ctx.measureText(p.bubble).width;
+  const pad = fs*0.55;
+  const bw = tw+pad*2, bh = fs*1.85;
+  let bx = clamp(g.x, bw/2+6, W-bw/2-6);
+  const by = g.headY - g.headR - bh*0.85;
+  ctx.globalAlpha = clamp(p.bubbleT*2.2, 0, 1);
+  ctx.fillStyle='#f4ead0'; ctx.strokeStyle='#231a12';
+  ctx.lineWidth=Math.max(2,fs*0.12);
+  ctx.beginPath(); ctx.roundRect(bx-bw/2, by-bh/2, bw, bh, bh*0.35);
+  ctx.fill(); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(g.x-fs*0.3, by+bh*0.45);
+  ctx.lineTo(g.x, by+bh*0.95);
+  ctx.lineTo(g.x+fs*0.3, by+bh*0.45);
+  ctx.closePath(); ctx.fillStyle='#f4ead0'; ctx.fill();
+  ctx.fillStyle='#231a12';
+  ctx.fillText(p.bubble, bx, by);
+  ctx.restore();
+}
+
+function drawBlood(){
+  ctx.save();
+  for(const b of G.blood){
+    const k = 1-b.age/b.life;
+    ctx.globalAlpha = clamp(k*1.3, 0, 1);
+    ctx.fillStyle = k>0.6 ? '#e01c22' : '#a30f14';
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r*(0.5+k*0.5), 0, 6.2832); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawSplats(){
+  ctx.save();
+  for(const s of G.splats){
+    ctx.globalAlpha = clamp(1-s.age/s.life, 0, 1)*0.85;
+    ctx.fillStyle='#8c1216';
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, s.r*1.5, s.r*0.55, 0, 0, 6.2832); ctx.fill();
+    for(let i=0;i<4;i++){
+      const a=(s.seed+i*1.7)%6.283;
+      ctx.beginPath();
+      ctx.arc(s.x+Math.cos(a)*s.r*2.1, s.y+Math.sin(a)*s.r*0.8, s.r*0.35, 0, 6.2832);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawDebris(d){
+  ctx.save();
+  ctx.globalAlpha = clamp(1-(d.age/d.life-0.6)/0.4, 0, 1);
+  ctx.translate(d.x,d.y); ctx.rotate(d.rot);
+  if(d.type==='hand'){
+    ctx.fillStyle=d.skin; ctx.strokeStyle='#231a12'; ctx.lineWidth=Math.max(1,d.size*0.12);
+    ctx.beginPath(); ctx.roundRect(-d.size*0.4,-d.size*0.5,d.size*0.8,d.size, d.size*0.35);
+    ctx.fill(); ctx.stroke();
+    for(let i=0;i<4;i++){
+      ctx.beginPath();
+      ctx.roundRect(-d.size*0.36+i*d.size*0.22, -d.size*0.92, d.size*0.17, d.size*0.5, d.size*0.09);
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.fillStyle='#a3121a';
+    ctx.beginPath(); ctx.ellipse(0, d.size*0.5, d.size*0.4, d.size*0.14, 0, 0, 6.2832); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawKnives(){
+  for(const k of G.knives){
+    if(k.landed) continue;
+    const t = clamp(k.age/k.life, 0, 1);
+    const x = lerp(k.x0,k.x1,t), y = lerp(k.y0,k.y1,t);
+    const a = Math.atan2(k.y1-k.y0, k.x1-k.x0);
+    const size = lerp(H*0.13, H*0.055, t);
+    ctx.save(); ctx.translate(x,y); ctx.rotate(a);
+    drawKnifeShape(size);
+    ctx.restore();
+  }
+}
+function drawKnifeShape(size){
+  ctx.fillStyle='#3a2a1c';
+  ctx.fillRect(-size*0.5,-size*0.09,size*0.42,size*0.18);
+  ctx.fillStyle='#d9dde2'; ctx.strokeStyle='#20262c';
+  ctx.lineWidth=Math.max(1,size*0.05);
+  ctx.beginPath();
+  ctx.moveTo(-size*0.08,-size*0.11);
+  ctx.lineTo(size*0.5,0);
+  ctx.lineTo(-size*0.08,size*0.11);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+}
+function drawKnifeStuck(x,y,size){
+  ctx.save(); ctx.translate(x,y); ctx.rotate(-0.35);
+  ctx.fillStyle='#3a2a1c';
+  ctx.fillRect(-size*0.05,-size*0.1,size*0.55,size*0.2);
+  ctx.restore();
+}
+
+function drawSlashes(){
+  ctx.save();
+  for(const s of G.slashes){
+    const k = 1-s.age/s.life;
+    ctx.globalAlpha=k;
+    ctx.strokeStyle='#fff6d8'; ctx.lineWidth=Math.max(3,H*0.009*k+2);
+    ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(s.x-Math.cos(s.a)*s.len/2, s.y-Math.sin(s.a)*s.len/2);
+    ctx.lineTo(s.x+Math.cos(s.a)*s.len/2, s.y+Math.sin(s.a)*s.len/2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPops(){
+  ctx.save();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const p of G.pops){
+    const k=1-p.age/p.life;
+    ctx.globalAlpha=clamp(k*1.5,0,1);
+    const fs=Math.max(18,H*0.045);
+    ctx.font=`800 ${fs}px "PT Sans",Verdana,sans-serif`;
+    ctx.lineWidth=Math.max(3,fs*0.16); ctx.strokeStyle='#1a120c';
+    ctx.strokeText(p.text,p.x,p.y);
+    ctx.fillStyle=p.color; ctx.fillText(p.text,p.x,p.y);
+  }
+  ctx.restore();
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   13. ФИНАЛЬНЫЕ ЭКРАНЫ
+   ═════════════════════════════════════════════════════════════════════ */
+function updateFinale(dt){
+  G.finaleT += dt;
+  if(G.outcome==='win'){
+    if(Math.random() < dt*3.2) launchFirework();
+    for(const f of G.fireworks){
+      f.age+=dt;
+      for(const s of f.sparks){
+        s.x+=s.vx*dt; s.y+=s.vy*dt; s.vy+=150*dt; s.vx*=0.985; s.vy*=0.985;
+      }
+    }
+    G.fireworks = G.fireworks.filter(f=>f.age<f.life);
+  }else{
+    for(const c of G.crows){
+      c.t+=dt;
+      c.y = c.baseY + Math.sin(c.t*1.6+c.ph)*H*0.004;
+    }
+    // Каркают трижды, каждый раз случайная запись из пула (см. CROWS).
+    if(G.finaleT>1.0 && !G.crowSaid){ G.crowSaid=true; cawOnce(0.9); }
+    if(G.finaleT>4.2 && !G.crowSaid2){ G.crowSaid2=true; cawOnce(0.62); }
+    if(G.finaleT>7.6 && !G.crowSaid3){ G.crowSaid3=true; cawOnce(0.5); }
+  }
+}
+
+// Пул карканья: crow0 — настоящая серая ворона (Wikimedia, public domain),
+// crow1/crow2 — записи заказчика. Каждый раз тянем случайную, не повторяя подряд.
+const CROWS = ['crow0','crow1','crow2'];
+let lastCrow = -1;
+function cawOnce(vol){
+  let i = rint(0, CROWS.length-1);
+  if(CROWS.length>1 && i===lastCrow) i = (i+1)%CROWS.length;
+  lastCrow = i;
+  Sound.play(CROWS[i], {vol, rate:rnd(0.93,1.07)});
+}
+
+function launchFirework(){
+  const x=rnd(W*0.12,W*0.88), y=rnd(H*0.08,H*0.42);
+  const hue=rint(0,360), n=rint(26,44);
+  const sparks=[];
+  for(let i=0;i<n;i++){
+    const a=(i/n)*6.2832+rnd(-0.1,0.1), sp=rnd(70,260);
+    sparks.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
+      c:`hsl(${(hue+rint(-25,25))%360} 95% ${rint(55,75)}%)`});
+  }
+  G.fireworks.push({sparks,age:0,life:rnd(1.6,2.6)});
+  Sound.boom();
+}
+
+function drawFinale(){
+  if(G.outcome==='win') drawWinScene(); else drawLoseScene();
+}
+
+function drawWinScene(){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#0d1030'); g.addColorStop(0.55,'#241a3a'); g.addColorStop(1,'#2c2118');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  for(const f of G.fireworks){
+    const k=1-f.age/f.life;
+    ctx.save(); ctx.globalAlpha=clamp(k*1.4,0,1);
+    for(const s of f.sparks){
+      ctx.fillStyle=s.c;
+      ctx.beginPath(); ctx.arc(s.x,s.y,Math.max(1.5,H*0.005*k+1),0,6.2832); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Продавец спиной, прыгает, по пучку в каждой руке.
+  // Рисуется ДО прилавка — иначе ноги оказываются перед ним.
+  const jump = Math.abs(Math.sin(G.finaleT*3.4));
+  const feet = H*0.99 - jump*H*0.07;
+  const h    = H*0.52;
+  const x    = W*0.5;
+  const bodyW= h*0.25;
+  const shY  = feet-h*0.79, hipY=feet-h*0.44, headY=feet-h*0.90, headR=h*0.088;
+
+  ctx.save();
+  ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.strokeStyle='#231a12'; ctx.lineWidth=Math.max(2,h*0.018);
+
+  ctx.fillStyle='#3f4f66';
+  for(const s of [-1,1]){
+    ctx.beginPath();
+    ctx.roundRect(x+s*bodyW*0.30-bodyW*0.17, hipY, bodyW*0.34, feet-hipY, bodyW*0.15);
+    ctx.fill(); ctx.stroke();
+  }
+  ctx.fillStyle='#7a5a34';
+  ctx.beginPath();
+  ctx.roundRect(x-bodyW, shY, bodyW*2, hipY-shY+h*0.06, bodyW*0.35);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#5d4426';
+  ctx.fillRect(x-bodyW, hipY-h*0.03, bodyW*2, h*0.035);
+
+  // поднятые руки
+  ctx.strokeStyle='#7a5a34'; ctx.lineWidth=bodyW*0.42;
+  const handY = shY - h*0.30 - jump*h*0.05;
+  for(const s of [-1,1]){
+    const hx = x+s*bodyW*1.5;
+    ctx.beginPath();
+    ctx.moveTo(x+s*bodyW*0.75, shY+h*0.05);
+    ctx.quadraticCurveTo(x+s*bodyW*1.5, shY-h*0.05, hx, handY);
+    ctx.stroke();
+    ctx.fillStyle='#e0b189';
+    ctx.beginPath(); ctx.arc(hx, handY, bodyW*0.28, 0, 6.2832); ctx.fill();
+    drawBundle(hx, handY-h*0.02, h*0.16, false);
+  }
+
+  ctx.fillStyle='#d9a878';
+  ctx.beginPath(); ctx.arc(x, headY, headR, 0, 6.2832); ctx.fill();
+  ctx.strokeStyle='#231a12'; ctx.lineWidth=Math.max(2,h*0.018); ctx.stroke();
+  ctx.fillStyle='#3a2a1c';
+  ctx.beginPath();
+  ctx.ellipse(x, headY-headR*0.1, headR*1.08, headR*0.98, 0, Math.PI, 0);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(x-headR*1.0, headY-headR*0.3, headR*2.0, headR*1.1, headR*0.4);
+  ctx.fill();
+  ctx.restore();
+
+  drawCounter();
+
+  ctx.save();
+  ctx.textAlign='center';
+  const fs=Math.max(24,H*0.075);
+  ctx.font=`800 ${fs}px "PT Sans",Verdana,sans-serif`;
+  ctx.lineWidth=Math.max(4,fs*0.14); ctx.strokeStyle='#1a120c';
+  ctx.strokeText('СМЕНА ОТРАБОТАНА!', W*0.5, H*0.16);
+  ctx.fillStyle='#ffd257';
+  ctx.fillText('СМЕНА ОТРАБОТАНА!', W*0.5, H*0.16);
+  ctx.restore();
+}
+
+function drawLoseScene(){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#161310'); g.addColorStop(0.5,'#2a241c'); g.addColorStop(1,'#1d1812');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  // пустая верёвка
+  ctx.strokeStyle='#6b5a3f'; ctx.lineWidth=Math.max(2,H*0.005);
+  ctx.beginPath();
+  ctx.moveTo(0,ropeY()); ctx.quadraticCurveTo(W*0.5, ropeY()+H*0.03, W, ropeY());
+  ctx.stroke();
+
+  // Продавец спиной, руки висят. Тоже до прилавка — ноги за ним.
+  const feet=H*0.99, h=H*0.50, x=W*0.5, bodyW=h*0.25;
+  const shY=feet-h*0.79, hipY=feet-h*0.44, headY=feet-h*0.90, headR=h*0.088;
+  ctx.save();
+  ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.strokeStyle='#1b1510'; ctx.lineWidth=Math.max(2,h*0.018);
+  ctx.fillStyle='#31404f';
+  for(const s of [-1,1]){
+    ctx.beginPath();
+    ctx.roundRect(x+s*bodyW*0.30-bodyW*0.17, hipY, bodyW*0.34, feet-hipY, bodyW*0.15);
+    ctx.fill(); ctx.stroke();
+  }
+  ctx.fillStyle='#5e4527';
+  ctx.beginPath();
+  ctx.roundRect(x-bodyW, shY, bodyW*2, hipY-shY+h*0.06, bodyW*0.35);
+  ctx.fill(); ctx.stroke();
+  // Руки висят плетьми, но кисти держим над кромкой прилавка — иначе безрукий силуэт.
+  const handY = Math.min(hipY + h*0.10, counterY() - h*0.05);
+  ctx.strokeStyle='#5e4527'; ctx.lineWidth=bodyW*0.42;
+  for(const s of [-1,1]){
+    ctx.beginPath();
+    ctx.moveTo(x+s*bodyW*0.75, shY+h*0.05);
+    ctx.quadraticCurveTo(x+s*bodyW*1.25, hipY-h*0.02, x+s*bodyW*1.15, handY);
+    ctx.stroke();
+    ctx.fillStyle='#b48a68';
+    ctx.beginPath(); ctx.arc(x+s*bodyW*1.15, handY, bodyW*0.27, 0, 6.2832); ctx.fill();
+  }
+  ctx.fillStyle='#b48a68';
+  ctx.beginPath(); ctx.arc(x, headY, headR, 0, 6.2832); ctx.fill();
+  ctx.strokeStyle='#1b1510'; ctx.lineWidth=Math.max(2,h*0.018); ctx.stroke();
+  ctx.fillStyle='#2e2116';
+  ctx.beginPath();
+  ctx.ellipse(x, headY-headR*0.1, headR*1.08, headR*0.98, 0, Math.PI, 0); ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(x-headR*1.0, headY-headR*0.3, headR*2.0, headR*1.1, headR*0.4); ctx.fill();
+  ctx.restore();
+
+  drawCounter();
+  for(const c of G.crows) drawCrow(c);
+
+  ctx.save();
+  ctx.textAlign='center';
+  const fs=Math.max(22,H*0.068);
+  ctx.font=`800 ${fs}px "PT Sans",Verdana,sans-serif`;
+  ctx.lineWidth=Math.max(4,fs*0.14); ctx.strokeStyle='#0d0a07';
+  ctx.strokeText('ТОВАР КОНЧИЛСЯ', W*0.5, H*0.17);
+  ctx.fillStyle='#c9403f';
+  ctx.fillText('ТОВАР КОНЧИЛСЯ', W*0.5, H*0.17);
+  ctx.font=`600 ${fs*0.42}px "PT Sans",Verdana,sans-serif`;
+  ctx.fillStyle='#9c8d72';
+  ctx.fillText('Торговать нечем. Смена сорвана.', W*0.5, H*0.24);
+  ctx.restore();
+}
+
+function drawCrow(c){
+  const s=c.size;
+  ctx.save(); ctx.translate(c.x,c.y);
+  ctx.fillStyle='#15100c';
+  ctx.beginPath(); ctx.ellipse(0,0,s*0.9,s*0.55,0.12,0,6.2832); ctx.fill();
+  ctx.beginPath(); ctx.arc(-s*0.85,-s*0.5,s*0.36,0,6.2832); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-s*1.15,-s*0.52); ctx.lineTo(-s*1.9,-s*0.4); ctx.lineTo(-s*1.15,-s*0.28);
+  ctx.closePath(); ctx.fillStyle='#3b3128'; ctx.fill();
+  ctx.fillStyle='#15100c';
+  ctx.beginPath();
+  ctx.moveTo(s*0.5,-s*0.1); ctx.lineTo(s*1.6,s*0.3); ctx.lineTo(s*0.4,s*0.3);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#c9b184';
+  ctx.beginPath(); ctx.arc(-s*0.95,-s*0.58,s*0.07,0,6.2832); ctx.fill();
+  ctx.restore();
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   14. ЭКРАНЫ И УПРАВЛЕНИЕ ИГРОЙ
+   ═════════════════════════════════════════════════════════════════════ */
+const el = id=>document.getElementById(id);
+const show = (id,on)=> el(id).classList.toggle('hidden', !on);
+
+function startGame(diffKey){
+  G.diff = DIFFICULTY[diffKey];
+  G.mode='play';
+  G.score=0;
+  G.bundles=G.diff.startBundles;
+  G.timeLeft=SHIFT_SECONDS;
+  G.people.length=0; G.blood.length=0; G.splats.length=0; G.debris.length=0;
+  G.pops.length=0; G.knives.length=0; G.slashes.length=0;
+  G.fireworks.length=0; G.crows.length=0;
+  G.spawnTimer=0.8; G.customersSpawned=0; G.sinceThief=0;
+  G.outcome=null; G.finaleT=0;
+  G.crowSaid=false; G.crowSaid2=false; G.crowSaid3=false;
+  G.stats=freshStats();
+
+  show('scrMenu',false); show('scrShop',false);
+  show('scrFinale',false); show('scrStats',false);
+  el('hud').classList.remove('hidden');
+  Sound.stopMusic();
+}
+
+function openShop(reason){
+  if(G.mode!=='play') return;
+  G.mode='shop';
+  el('shopReason').textContent = reason || 'Игра на паузе. Таймер смены стоит.';
+  refreshShop();
+  show('scrShop',true);
+}
+function refreshShop(){
+  const price=G.diff.price;
+  const canBuy = Math.max(0, Math.floor(G.score/price));
+  el('shopInfo').innerHTML =
+    `Пучок травы — <b>${price}</b> очков.<br>` +
+    `У тебя <b>${G.score}</b> очков и <b>${G.bundles}</b> пучков.<br>` +
+    (canBuy>0
+      ? `Хватит на <b>${canBuy}</b> ${plural(canBuy,'пучок','пучка','пучков')}.`
+      : `<span class="low">Очков на закупку не хватает.</span>`);
+  el('buy1').disabled  = G.score<price;
+  el('buy5').disabled  = G.score<price*5;
+  el('buyMax').disabled= canBuy<1;
+  el('btnResume').disabled = (G.bundles===0);
+  el('btnResume').textContent = G.bundles===0 ? 'Без товара за прилавок нельзя' : 'За прилавок!';
+}
+function buy(n){
+  const price=G.diff.price;
+  const k=Math.min(n, Math.floor(G.score/price));
+  if(k<=0) return;
+  G.score -= k*price;
+  G.bundles += k;
+  G.stats.bought += k; G.stats.spent += k*price;
+  Sound.cash();
+  refreshShop(); syncHud();
+}
+function closeShop(){
+  if(G.bundles===0){                 // товара нет и купить не смог — конец
+    show('scrShop',false);
+    endGame('lose');
+    return;
+  }
+  G.mode='play';
+  show('scrShop',false);
+}
+
+function endGame(outcome){
+  G.outcome=outcome;
+  G.mode='finale';
+  G.finaleT=0;
+  el('hud').classList.add('hidden');
+  show('scrShop',false);
+  show('scrFinale',true);
+
+  if(outcome==='win'){
+    Sound.playMusic('fireworks');
+    for(let i=0;i<4;i++) setTimeout(launchFirework, i*220);
+  }else{
+    Sound.stopMusic();
+    G.crows.length=0;
+    const n=rint(3,4);
+    for(let i=0;i<n;i++){
+      const baseY = counterY() - H*0.012 - (i%2)*H*0.006;
+      G.crows.push({x: W*(0.14+i*0.24)+rnd(-W*0.03,W*0.03), y:baseY, baseY,
+                    size:H*0.030+rnd(0,H*0.008), t:0, ph:rnd(0,6.28)});
+    }
+  }
+  saveBest();
+}
+
+function saveBest(){
+  try{
+    const key='ruki_best_'+G.diff.key;
+    const prev = parseInt(localStorage.getItem(key)||'-999999',10);
+    if(G.score>prev) localStorage.setItem(key, String(G.score));
+  }catch(e){}
+}
+function bestOf(k){
+  try{
+    const v=localStorage.getItem('ruki_best_'+k);
+    return v===null?null:parseInt(v,10);
+  }catch(e){ return null; }
+}
+function refreshBestLine(){
+  const parts=[];
+  for(const k of ['easy','normal','hard']){
+    const b=bestOf(k);
+    if(b!==null) parts.push(`${DIFFICULTY[k].name}: <b>${b}</b>`);
+  }
+  el('bestLine').innerHTML = parts.length ? 'Твои рекорды — '+parts.join(' · ') : '';
+}
+
+function showStats(){
+  show('scrFinale',false);
+  Sound.stopMusic();
+  G.mode='stats';
+  const s=G.stats, win=G.outcome==='win';
+  el('statsTitle').textContent = win ? '🌿 Смена отработана' : '💀 Смена сорвана';
+  el('statsSub').textContent = win
+    ? `Уровень «${G.diff.name}». Прилавок выстоял все 5 минут.`
+    : `Уровень «${G.diff.name}». Товар кончился, торговать нечем.`;
+  const rows=[
+    ['Покалечено покупателей', s.maimed],
+    ['Успели убрать руку', s.withdrew],
+    ['Наказано воров', s.thievesPunished],
+    ['Сбежало воров', s.thievesEscaped],
+    ['Продано пучков', s.sold],
+    ['Испорчено пучков', s.spoiled],
+    ['Украдено пучков', s.stolen],
+    ['Закуплено пучков', `${s.bought} (−${s.spent})`],
+    ['Осталось пучков', G.bundles],
+  ];
+  const best=bestOf(G.diff.key);
+  let html = rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+  html += `<tr class="total"><td>Заработано очков</td><td>${G.score}</td></tr>`;
+  if(best!==null) html += `<tr><td>Личный рекорд</td><td>${best}</td></tr>`;
+  el('statsTable').innerHTML = html;
+  show('scrStats',true);
+}
+
+function toMenu(){
+  G.mode='menu';
+  Sound.stopMusic();
+  show('scrStats',false); show('scrFinale',false); show('scrShop',false);
+  el('hud').classList.add('hidden');
+  refreshBestLine();
+  show('scrMenu',true);
+}
+
+function plural(n,one,few,many){
+  const n10=n%10, n100=n%100;
+  if(n10===1 && n100!==11) return one;
+  if(n10>=2 && n10<=4 && (n100<10||n100>=20)) return few;
+  return many;
+}
+
+function syncHud(){
+  el('hudScore').textContent = G.score;
+  const b=el('hudBundles');
+  b.textContent = G.bundles;
+  b.parentElement.classList.toggle('low', G.bundles<=3);
+  const t=Math.max(0,Math.ceil(G.timeLeft));
+  el('hudTime').textContent = `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`;
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+   15. ЦИКЛ И СОБЫТИЯ
+   ═════════════════════════════════════════════════════════════════════ */
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize);
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now-last)/1000);
+  last = now;
+  update(dt);
+  draw();
+  if(G.mode==='play') syncHud();
+  requestAnimationFrame(frame);
+}
+
+cv.addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  onPoint(e.clientX-r.left, e.clientY-r.top);
+});
+cv.addEventListener('contextmenu', e=>e.preventDefault());
+
+document.querySelectorAll('.diffbtn').forEach(b=>{
+  b.addEventListener('click', async ()=>{
+    await Sound.init();
+    startGame(b.dataset.diff);
+  });
+});
+el('btnShop').addEventListener('click', ()=>openShop());
+el('btnResume').addEventListener('click', closeShop);
+el('buy1').addEventListener('click', ()=>buy(1));
+el('buy5').addEventListener('click', ()=>buy(5));
+el('buyMax').addEventListener('click', ()=>buy(999));
+el('btnStats').addEventListener('click', showStats);
+el('btnAgain').addEventListener('click', ()=>startGame(G.diff.key));
+el('btnMenu').addEventListener('click', toMenu);
+el('btnSound').addEventListener('click', ()=>{
+  Sound.on = !Sound.on;
+  el('btnSound').textContent = Sound.on ? '🔊' : '🔇';
+  if(!Sound.on) Sound.stopMusic();
+});
+window.addEventListener('keydown', e=>{
+  if(e.key==='p'||e.key==='P'||e.key==='з'||e.key==='З'){
+    if(G.mode==='play') openShop(); else if(G.mode==='shop') closeShop();
+  }
+});
+
+/* Отладочный хук. Игре не нужен, но позволяет гонять её из консоли:
+   GAME.startGame('normal');  GAME.step(1/60);  GAME.G.bundles = 1;  ...
+   step() двигает время принудительно — работает и в фоновой вкладке,
+   где requestAnimationFrame заморожен браузером. */
+window.GAME = {
+  get G(){ return G; },
+  DIFFICULTY, Sound,
+  step(dt){ update(dt); draw(); if(G.mode==='play') syncHud(); },
+  tick(dt){ update(dt); },   // без отрисовки — для быстрых прогонов баланса
+  run(seconds, dt=1/60){ for(let i=0;i<Math.round(seconds/dt);i++) this.step(dt); },
+  startGame, endGame, onPoint, openShop, closeShop, showStats,
+  handPos, personGeom,
+};
+
+resize();
+refreshBestLine();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
