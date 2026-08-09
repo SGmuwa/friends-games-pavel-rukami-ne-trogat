@@ -114,6 +114,9 @@
   .kbd{display:inline-block;background:#3a2c1f;border:1px solid #7d6340;border-radius:5px;
     padding:1px 6px;font-size:13px}
   .credits{margin-top:12px;font-size:11.5px;color:#8b7c62;line-height:1.5}
+  /* Переключатель настройки: тусклый, когда выключен, — состояние видно без чтения */
+  button.opt{font-size:14px;padding:9px 14px}
+  button.opt.off{opacity:.62}
 </style>
 </head>
 <body>
@@ -138,18 +141,21 @@
         Ты за прилавком с лекарственными травами. Покупатели тянут руки к товару —
         руби мачете. Воры хватают пучки и убегают — метай нож в спину.<br>
         <b>Тапай или кликай прямо по руке и по спине.</b><br>
-        Отрубил руку — пучок продан. Прозевал — пучок испорчен.
+        Отрубил руку — пучок продан за 150. Прозевал — пучок испорчен.
         Пучки кончились — смена сорвана.
       </p>
       <p class="lead"><b>Смена длится 2 минуты. Чем дальше, тем быстрее хватают руки —
-        в финале на удар остаётся 0.15 секунды. Выбери уровень:</b></p>
+        в финале на удар остаётся 0.35 секунды. Выбери уровень:</b></p>
       <div class="row">
         <button class="diffbtn" data-diff="easy"><b>Ученик знахаря</b>
-          <span>15 пучков, пучок 40, разгон плавный</span></button>
+          <span>15 пучков, закупка 80, толпа набирается медленно</span></button>
         <button class="diffbtn" data-diff="normal"><b>Знахарь</b>
-          <span>10 пучков, пучок 80, разгон бодрый</span></button>
+          <span>10 пучков, закупка 120, толпа набирается бодро</span></button>
         <button class="diffbtn" data-diff="hard"><b>Мясник</b>
-          <span>8 пучков, пучок 90, разгон с первой секунды</span></button>
+          <span>8 пучков, закупка 140, толпа с первой минуты</span></button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="opt" data-opt="bubbles">Реплики текстом: выкл</button>
       </div>
       <p class="lead" id="bestLine" style="margin-top:14px"></p>
       <div class="credits">
@@ -171,6 +177,9 @@
         <button id="buy1">Купить 1</button>
         <button id="buy5">Купить 5</button>
         <button id="buyMax">Купить сколько влезет</button>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button class="opt" data-opt="bubbles">Реплики текстом: выкл</button>
       </div>
       <div class="row" style="margin-top:14px">
         <button class="primary" id="btnResume">За прилавок!</button>
@@ -214,33 +223,46 @@
 const DIFFICULTY = {
   easy: {
     key:'easy', name:'Ученик знахаря',
-    grab:[2.40, 0.15, 2.40], // окно на удар по руке: 2.40 с → 0.15 с
-    flee:[2.40, 0.90, 2.40], // окно на бросок ножа в вора
-    startBundles:15, price:40,
-    sell:150, missPts:-30, thiefPts:150, thiefEscPts:-100,
+    grab:[2.40, 0.35, 2.20], // окно на удар по руке: 2.40 с → 0.35 с
+    flee:[2.40, 0.90, 2.20], // окно на бросок ножа в вора
+    startBundles:15, price:80,
+    sell:150, missPts:-60, thiefPts:100, thiefEscPts:-100,
     thiefEvery:6,            // вор после каждого N-го покупателя
-    spawn:[2.30, 0.22],      // интервал спавна: начало смены → конец
+    spawn:[2.30, 0.20],      // интервал спавна: начало смены → конец
+    crowd:1.7,               // кривизна набора толпы: 1 → MAX_ON_SCREEN
   },
   normal: {
     key:'normal', name:'Знахарь',
-    grab:[2.00, 0.15, 1.60], flee:[2.20, 0.70, 1.60],
-    startBundles:10, price:80,
-    sell:150, missPts:-40, thiefPts:150, thiefEscPts:-100,
-    thiefEvery:5, spawn:[2.10, 0.18],
+    grab:[2.00, 0.35, 0.60], flee:[2.20, 0.70, 0.60],
+    startBundles:10, price:120,
+    sell:150, missPts:-80, thiefPts:60, thiefEscPts:-100,
+    thiefEvery:5, spawn:[2.10, 0.16], crowd:1.0,
   },
   hard: {
     key:'hard', name:'Мясник',
-    grab:[1.50, 0.15, 1.00], flee:[1.90, 0.50, 1.00],
-    startBundles:8, price:90,
-    sell:150, missPts:-60, thiefPts:150, thiefEscPts:-120,
-    thiefEvery:4, spawn:[1.80, 0.15],
+    grab:[1.50, 0.35, 0.50], flee:[1.90, 0.50, 0.50],
+    startBundles:8, price:140,
+    sell:150, missPts:-80, thiefPts:60, thiefEscPts:-120,
+    thiefEvery:4, spawn:[1.80, 0.13], crowd:0.65,
   },
 };
 
 const SHIFT_SECONDS = 120;      // 2 минуты
-const MAX_ON_SCREEN = 10;       // сколько покупателей толпится разом к концу смены
+const MAX_ON_SCREEN = 5;        // сколько покупателей толпится разом к концу смены
 const ASK_TIME      = 0.32;     // «Сколько стоят?» перед тем как потянуть руку
 const MAX_HANGING   = 14;       // сколько пучков влезает на верёвку
+
+/* Настройки игрока. Хранятся в localStorage: игра — один файл без сервера.
+   Баблы по умолчанию выключены — реплики и так звучат голосом, а текст над
+   толпой закрывает те самые кисти, по которым надо попадать. Плашки крика
+   продавца это не касается: она одна и висит над прилавком, а не на людях. */
+const OPT = { bubbles:false };
+function loadOpts(){
+  try{ OPT.bubbles = localStorage.getItem('ruki_opt_bubbles')==='1'; }catch(e){}
+}
+function saveOpts(){
+  try{ localStorage.setItem('ruki_opt_bubbles', OPT.bubbles?'1':'0'); }catch(e){}
+}
 
 // Прогресс смены 0 → 1. От него зависят и окна реакции, и плотность толпы.
 const shiftProgress = ()=> clamp(1 - G.timeLeft/SHIFT_SECONDS, 0, 1);
@@ -541,30 +563,36 @@ function makeAppearance(){
   };
 }
 
-// До десяти человек разом — если ставить их в случайные точки, они слипаются
+// Несколько человек разом — если ставить их в случайные точки, они слипаются
 // в одну кучу и кисти становятся неразличимы. Берём самое свободное место.
 function freeLane(lo, hi){
   const busy = G.people.filter(p=>!p.dead).map(p=>p.laneX);
-  let best=rnd(lo,hi), bestGap=-1;
-  for(let i=0;i<14;i++){
-    const x=rnd(lo,hi);
+  const n = MAX_ON_SCREEN;                 // мест ровно столько, сколько людей влезает
+  const start = rint(0, n-1);              // случайный обход: иначе пустая сцена
+  let best = lo, bestGap = -1;             // всегда заполняется слева направо
+  for(let k=0;k<n;k++){
+    const i = (start+k)%n;
+    const x = lo + (hi-lo)*(n===1 ? 0.5 : i/(n-1));
     const gap = busy.length ? Math.min(...busy.map(b=>Math.abs(b-x))) : Infinity;
     if(gap>bestGap){ bestGap=gap; best=x; }
   }
-  return best;
+  return best + rnd(-(hi-lo)*0.025, (hi-lo)*0.025);
 }
 
 // Сколько покупателей вправе стоять у прилавка прямо сейчас: строго один в начале
-// смены, до MAX_ON_SCREEN к концу.
+// смены, до MAX_ON_SCREEN к концу. Кривизна набора — уровневая: главный источник
+// сложности не окно реакции, а поток. Окно ограничено снизу 0.35 с, а вот
+// сколько рук тянется одновременно — упирается только в скорость игрока.
 function crowdCap(prog){
-  return 1 + Math.floor(clamp(prog,0,1)*(MAX_ON_SCREEN-0.001));
+  const c = (G.diff && G.diff.crowd) || 1;
+  return 1 + Math.floor(Math.pow(clamp(prog,0,1), c)*(MAX_ON_SCREEN-0.001));
 }
 
-// Чем плотнее толпа, тем мельче фигуры — иначе вдесятером они не помещаются
+// Чем плотнее толпа, тем мельче фигуры — иначе впятером они не помещаются
 // по ширине и перекрывают друг другу кисти. Множитель фиксируется при появлении
 // и с человеком не меняется, иначе фигура прыгала бы в размере на глазах.
 function crowdScale(prog){
-  return lerp(1.0, 0.60, (crowdCap(prog)-1)/(MAX_ON_SCREEN-1));
+  return lerp(1.0, 0.80, (crowdCap(prog)-1)/(MAX_ON_SCREEN-1));
 }
 
 function spawnCustomer(){
@@ -596,7 +624,9 @@ function spawnCustomer(){
 function spawnThief(){
   const d = G.diff;
   const prog = shiftProgress();
-  const laneX = freeLane(W*0.14, W*0.86);
+  // Сетка мест у вора та же, что у покупателей: две разные сетки давали пары
+  // фигур в 30 пикселях друг от друга, и кисти сливались.
+  const laneX = freeLane(W*0.09, W*0.91);
   G.people.push({
     kind:'thief', state:'run', t:0, sizeK: crowdScale(prog),
     approach: lerp(0.95, 0.60, prog),
@@ -752,9 +782,10 @@ function updateCustomer(p, dt){
         p.state='ask'; p.t=0;
         const line = pickLine(p.look.female ? 'ask_f' : 'ask_m');
         p.bubble = TEXT[line]; p.bubbleT = 1.2;
-        // В толпе из десяти голоса накладываются в кашу: озвучиваем только когда
-        // канал относительно свободен, текст бабла показываем всегда.
-        if(Sound.busy() < 2) Sound.say(line, {vol:0.9, rate:rnd(0.94,1.07)});
+        // Голоса накладываются в кашу, если говорить всем сразу: пропускаем
+        // реплику, когда канал занят. Баблы по умолчанию выключены, поэтому
+        // порог мягкий — иначе о подходе покупателя нечем сообщить.
+        if(Sound.busy() < 3) Sound.say(line, {vol:0.9, rate:rnd(0.94,1.07)});
       }
       break;
 
@@ -787,7 +818,9 @@ function updateCustomer(p, dt){
       break;
 
     case 'chopped':
-      if(p.t>1.5){ p.state='leave'; p.t=0; }
+      // Место у прилавка держится ровно столько, чтобы разглядеть культю:
+      // дольше — и очередь упирается не в игрока, а в анимацию.
+      if(p.t>1.0){ p.state='leave'; p.t=0; }
       break;
 
     case 'leave':
@@ -983,12 +1016,15 @@ function draw(){
   drawBlood();
   drawKnives();
   drawSlashes();
-  // Баблов на экране не больше четырёх: вдевятером они перекрывают друг друга
-  // и не читается ни один. Показываем самые свежие — они и есть новости.
-  sorted.filter(p=>p.bubble && p.bubbleT>0)
-        .sort((a,b)=>b.bubbleT-a.bubbleT)
-        .slice(0,4)
-        .forEach(drawBubble);
+  // Баблы — настройка, по умолчанию выключены. Даже включённых на экране не
+  // больше трёх: впятером они перекрывают друг друга и не читается ни один.
+  // Показываем самые свежие — они и есть новости.
+  if(OPT.bubbles){
+    sorted.filter(p=>p.bubble && p.bubbleT>0)
+          .sort((a,b)=>b.bubbleT-a.bubbleT)
+          .slice(0,3)
+          .forEach(drawBubble);
+  }
   drawPops();
   drawShout();
 }
@@ -2009,6 +2045,21 @@ el('buyMax').addEventListener('click', ()=>buy(999));
 el('btnStats').addEventListener('click', showStats);
 el('btnAgain').addEventListener('click', ()=>{ goFullscreen(); startGame(G.diff.key); });
 el('btnMenu').addEventListener('click', toMenu);
+/* Переключатель баблов стоит на двух экранах — в меню и в «Лавке», потому что
+   мешать они начинают уже посреди смены, а смена ставится на паузу только там. */
+function syncOptBtns(){
+  document.querySelectorAll('[data-opt="bubbles"]').forEach(b=>{
+    b.textContent = 'Реплики текстом: ' + (OPT.bubbles ? 'вкл' : 'выкл');
+    b.classList.toggle('off', !OPT.bubbles);
+  });
+}
+document.querySelectorAll('[data-opt="bubbles"]').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    OPT.bubbles = !OPT.bubbles;
+    saveOpts();
+    syncOptBtns();
+  });
+});
 el('btnSound').addEventListener('click', ()=>{
   Sound.on = !Sound.on;
   el('btnSound').textContent = Sound.on ? '🔊' : '🔇';
@@ -2031,11 +2082,13 @@ window.GAME = {
   tick(dt){ update(dt); },   // без отрисовки — для быстрых прогонов баланса
   run(seconds, dt=1/60){ for(let i=0;i<Math.round(seconds/dt);i++) this.step(dt); },
   startGame, endGame, onPoint, openShop, closeShop, showStats,
-  handPos, personGeom,
+  handPos, personGeom, OPT,
 };
 
 resize();
 syncFullBtn();
+loadOpts();
+syncOptBtns();
 refreshBestLine();
 // Адресная строка Android меняет высоту вьюпорта на лету — пересчитываем канву.
 if(window.visualViewport) window.visualViewport.addEventListener('resize', resize);
