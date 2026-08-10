@@ -1,0 +1,67 @@
+# «Руками не трогать!» — браузерная аркада.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Copyright (C) 2026 Павел Сидоренко (основной правообладатель),
+#                    Михаил Сидоренко, Ольга Сидоренко
+#
+# Свободное программное обеспечение: распространяется на условиях GNU Affero
+# General Public License версии 3 или (по вашему выбору) любой более поздней.
+# Без каких бы то ни было гарантий. Полный текст лицензии — в файле LICENSE
+# и на <https://www.gnu.org/licenses/>.
+#
+# Медиафайлы (озвучка в audio-video/) — CC BY-SA 4.0, см. файл LICENSE-ASSETS.
+name: Публикация игры на GitHub Pages
+
+# Сайт собирается из одного готового файла ruki-ne-trogat.html: он копируется
+# в site/index.html и деплоится. Исходники (src/, build/, audio-video/, DESIGN.md)
+# на сайт не попадают — они остаются только в репозитории.
+#
+# Требуется один раз включить: Settings → Pages → Build and deployment →
+# Source: GitHub Actions.
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - ruki-ne-trogat.html
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Параллельные деплои не нужны: побеждает последний push.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Собрать каталог сайта
+        run: |
+          set -eu
+          test -f ruki-ne-trogat.html
+          mkdir -p site
+          cp ruki-ne-trogat.html site/index.html
+          # Без .nojekyll Pages прогоняет каталог через Jekyll: он выкидывает
+          # файлы и папки, начинающиеся с "_", и спотыкается на нелатинских именах.
+          touch site/.nojekyll
+          ls -l site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

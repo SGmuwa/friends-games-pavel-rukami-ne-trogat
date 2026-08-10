@@ -1,3 +1,7 @@
 # Промежуточные аудиофайлы: генерируются из *.mkv и скачиваются с Wikimedia Commons
 # командой `bash build/make-audio.sh`. В репозитории им делать нечего (13 МБ).
 build/audio/
+
+# Каталог сайта: собирается workflow-ом .github/workflows/pages.yml из
+# ruki-ne-trogat.html. Локально появляется только при ручной проверке публикации.
+site/
