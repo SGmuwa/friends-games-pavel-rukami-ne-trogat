@@ -145,7 +145,9 @@
         Пучки кончились — смена сорвана.
       </p>
       <p class="lead"><b>Смена длится 2 минуты. Чем дальше, тем быстрее хватают руки —
-        в финале на удар остаётся 0.35 секунды. Выбери уровень:</b></p>
+        в финале на удар остаётся 0.35 секунды.</b><br>
+        Когда время выйдет, таймер уйдёт в минус: новые не подходят, но тех, кто уже
+        у прилавка, надо доработать. Выбери уровень:</p>
       <div class="row">
         <button class="diffbtn" data-diff="easy"><b>Ученик знахаря</b>
           <span>15 пучков, закупка 80, толпа набирается медленно</span></button>
@@ -302,6 +304,7 @@ const TEXT = {
   esc1:'Шарапова на тебя нет!', esc2:'Эх! Ты убёг!',
   low1:'Пучки заканчиваются',   low2:'Кончаются пучёчки',
   stock_out:'Ну как так-то?',
+  last_call:'Смена окончена! Дообслужу последних.',
   win_line:'Смена отработана! Всех обслужил!',
   lose_line:'Я разорён',
 };
@@ -505,6 +508,9 @@ const G = {
   spawnTimer:1.0,
   customersSpawned:0,
   sinceThief:0,
+  lastCall:null,          // null | 'time' | 'stock' — стадия «до последнего покупателя»
+  lastCallTail:0,         // сколько уже держим пустую сцену перед концовкой
+  outcomePlanned:null,    // каким будет финал, когда стадия доиграет
   outcome:null,           // 'win' | 'lose'
   finaleT:0,
   stats:null,
@@ -682,8 +688,9 @@ function loseBundle(reason){
 
 // Предупреждение о тающем запасе. Срабатывает один раз на пересечение порога,
 // иначе продавец начинает причитать над каждым проданным пучком.
+// В концовке молчит: докупиться уже нельзя, предупреждать не о чем.
 function checkLowStock(){
-  if(G.mode!=='play') return;
+  if(G.mode!=='play' || G.lastCall) return;
   if(G.bundles>0 && G.bundles<=3 && !G.lowWarned){
     G.lowWarned = true;
     shout('low');
@@ -695,11 +702,55 @@ function checkLowStock(){
 function checkOutOfStock(){
   if(G.bundles>0 || G.mode!=='play') return;
   shout(null, {name:'stock_out'});
+  if(G.lastCall){
+    // Концовка уже идёт — докупаться поздно. Победу отнимает не сам факт нуля,
+    // а люди, которым после этого нечего продать: если пучок ушёл на последнем
+    // покупателе и сцена пуста, смена всё равно считается отработанной.
+    if(G.lastCall==='time' && lastCallPending()) G.outcomePlanned='lose';
+    return;
+  }
   if(G.score >= G.diff.price){
     openShop('Товар кончился! Закупись, иначе смена сорвана.');
   }else{
-    endGame('lose');
+    beginLastCall('stock');
   }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Стадия «работа до последнего покупателя/вора».
+   Начинается, когда смена по сути закончилась: истёк таймер либо кончилась
+   трава и купить новую не на что. Новых людей не появляется, уже пришедшие
+   доигрывают своё и расходятся — и только потом идёт концовка. Так игрок
+   видит, чем всё закончилось, а не обрывается на полудвижении.
+   ───────────────────────────────────────────────────────────────────── */
+function beginLastCall(reason){
+  if(G.lastCall || G.mode!=='play') return;
+  G.lastCall = reason;                    // 'time' | 'stock'
+  G.lastCallTail = 0;
+  // Таймер добил до нуля — смена отработана; трава кончилась — отыграться нельзя.
+  G.outcomePlanned = reason==='time' ? 'win' : 'lose';
+  el('btnShop').disabled = true;          // лавка закрыта: исход уже определён
+  if(reason==='time') shout(null, {voice:false, name:'last_call'});
+}
+
+// Есть ли ещё люди, которым нужен товар: покупатель до ухода, вор до бегства.
+// Отрубленные, огрызающиеся и уходящие сюда не входят — своё они уже получили.
+function lastCallPending(){
+  return G.people.some(p=> !p.dead && (p.kind==='customer'
+    ? (p.state==='approach' || p.state==='ask' || p.state==='reach')
+    : (p.state==='run' || p.state==='grab' || p.state==='flee')));
+}
+
+function updateLastCall(dt){
+  // Сцена ещё живая — ждём. Нож в полёте тоже считается: он может вернуть пучок.
+  if(G.people.length || G.knives.length){ G.lastCallTail = 0; return; }
+  G.lastCallTail += dt;
+  // Дать договорить последнюю реплику, но не ждать её бесконечно.
+  const shoutLeft = (G.shout && G.shout.age < G.shout.life) ? G.shout.life - G.shout.age : 0;
+  const hold = Math.min(2.5, Math.max(0.5, shoutLeft));
+  if(G.lastCallTail < hold) return;
+  if(Sound.busy() && G.lastCallTail < 2.5) return;
+  endGame(G.outcomePlanned);
 }
 
 /* ═════════════════════════════════════════════════════════════════════
@@ -709,16 +760,18 @@ function update(dt){
   if(G.mode==='finale'){ updateFinale(dt); return; }
   if(G.mode!=='play') return;
 
+  // Таймер уходит в минус и остаётся на виду: это сигнал игроку, что смена уже
+  // кончилась и он доигрывает последних, а не то, что часы сломались.
   G.timeLeft -= dt;
-  if(G.timeLeft<=0){ G.timeLeft=0; endGame('win'); return; }
+  if(G.timeLeft<=0) beginLastCall('time');
 
   const prog = shiftProgress();                              // 0 → 1 за смену
   const maxActive = crowdCap(prog);                          // 1 → MAX_ON_SCREEN
   const d = G.diff;
 
-  // ---- спавн
+  // ---- спавн (в концовке новых людей не появляется)
   G.spawnTimer -= dt;
-  if(G.spawnTimer<=0){
+  if(G.spawnTimer<=0 && !G.lastCall){
     const live = G.people.filter(p=>p.kind==='customer' && !p.dead && p.state!=='leave').length;
     if(live < maxActive){
       if(G.sinceThief >= d.thiefEvery && G.bundles>0) spawnThief();
@@ -772,6 +825,9 @@ function update(dt){
     }
   }
   G.knives = G.knives.filter(k=>k.age < k.life + 0.05);
+
+  // ---- концовка: когда последний человек ушёл, включаем финальный экран
+  if(G.lastCall) updateLastCall(dt);
 }
 
 function updateCustomer(p, dt){
@@ -791,12 +847,20 @@ function updateCustomer(p, dt){
 
     case 'ask':
       if(p.t>=p.ask){
-        p.state='reach'; p.t=0;
         const slots = bundleSlots();
-        p.targetSlot = slots.length
-          ? slots.reduce((a,b)=> Math.abs(b.x-p.laneX)<Math.abs(a.x-p.laneX)?b:a)
-          : {x:p.laneX, y:ropeY()+H*0.05};
+        if(slots.length){
+          p.state='reach'; p.t=0;
+          p.targetSlot = slots.reduce((a,b)=> Math.abs(b.x-p.laneX)<Math.abs(a.x-p.laneX)?b:a);
+        }else{
+          // Верёвка пуста — тянуться не к чему. Постоит и уйдёт ни с чем:
+          // ни продажи, ни промаха, ни штрафа за то, чего на прилавке нет.
+          p.state='empty'; p.t=0; p.bubble=null; p.bubbleT=0;
+        }
       }
+      break;
+
+    case 'empty':
+      if(p.t>1.0){ p.state='leave'; p.t=0; }
       break;
 
     case 'reach':
@@ -835,17 +899,31 @@ function updateThief(p, dt){
     case 'run':
       p.z = clamp(p.t/p.approach, 0, 1);
       if(p.z>=1){
-        p.state='grab'; p.t=0;
+        p.t=0;
         if(G.bundles>0){
           G.bundles--;                 // пучок в руках вора; вернётся, если попадём
           p.carrying = true;
+          p.state='grab';
+          shout('grab');
+        }else{
+          // Красть нечего — вор потопчется у пустого прилавка и уйдёт.
+          // Ни ножа в спину, ни штрафа за побег: он ничего не унёс.
+          p.state='empty';
         }
-        shout('grab');
       }
       break;
 
     case 'grab':
       if(p.t>0.28){ p.state='flee'; p.t=0; }
+      break;
+
+    case 'empty':
+      if(p.t>1.0){ p.state='giveup'; p.t=0; }
+      break;
+
+    case 'giveup':
+      p.z -= dt/1.1;
+      if(p.z<=0) p.dead=true;
       break;
 
     case 'flee':
@@ -1168,7 +1246,8 @@ function drawBundle(x, y, size, hanging){
 function drawPerson(p){
   const g = personGeom(p);
   const L = p.look;
-  const back = (p.kind==='thief' && (p.state==='flee' || p.state==='down' || p.state==='grab'));
+  const back = (p.kind==='thief' &&
+    (p.state==='flee' || p.state==='down' || p.state==='grab' || p.state==='giveup'));
   const down = (p.state==='down');
 
   ctx.save();
@@ -1178,7 +1257,7 @@ function drawPerson(p){
     ctx.translate(-g.x, -g.feet);
     ctx.globalAlpha = clamp(1-(p.fallT-1.4)/0.8, 0, 1);
   }
-  if(p.state==='leave') ctx.globalAlpha = clamp(p.z*1.6, 0, 1);
+  if(p.state==='leave' || p.state==='giveup') ctx.globalAlpha = clamp(p.z*1.6, 0, 1);
 
   const lw = Math.max(1.5, g.h*0.018);
   ctx.lineJoin='round'; ctx.lineCap='round';
@@ -1413,7 +1492,7 @@ function drawIdleArms(p, g, back){
   // обычные руки (в т.ч. вор со спины)
   for(const s of [-1,1]){
     let ex=g.x + s*g.bodyW*1.15, ey=restY;
-    if(p.kind==='thief' && (p.state==='flee'||p.state==='run')){
+    if(p.kind==='thief' && (p.state==='flee'||p.state==='run'||p.state==='giveup')){
       const swing=Math.sin(p.t*22 + (s>0?0:Math.PI))*g.h*0.09;
       ey += swing; ex += s*g.h*0.02;
     }
@@ -1794,6 +1873,7 @@ function startGame(diffKey){
   G.pops.length=0; G.knives.length=0; G.slashes.length=0;
   G.fireworks.length=0; G.crows.length=0;
   G.spawnTimer=0.8; G.customersSpawned=0; G.sinceThief=0;
+  G.lastCall=null; G.lastCallTail=0; G.outcomePlanned=null;
   G.outcome=null; G.finaleT=0; G.finaleHold=0; G.musicStarted=false;
   G.shout=null; G.lowWarned=false;
   G.crowSaid=false; G.crowSaid2=false; G.crowSaid3=false;
@@ -1802,12 +1882,14 @@ function startGame(diffKey){
   show('scrMenu',false); show('scrShop',false);
   show('scrFinale',false); show('scrStats',false);
   el('hud').classList.remove('hidden');
+  el('btnShop').disabled = false;
   fitHud();                     // измерять можно только когда HUD показан
   Sound.stopMusic();
 }
 
 function openShop(reason){
-  if(G.mode!=='play') return;
+  // В концовке лавка закрыта: исход смены уже определён, закупкой его не поменять.
+  if(G.mode!=='play' || G.lastCall) return;
   G.mode='shop';
   el('shopReason').textContent = reason || 'Игра на паузе. Таймер смены стоит.';
   refreshShop();
@@ -1839,13 +1921,11 @@ function buy(n){
   refreshShop(); syncHud();
 }
 function closeShop(){
-  if(G.bundles===0){                 // товара нет и купить не смог — конец
-    show('scrShop',false);
-    endGame('lose');
-    return;
-  }
   G.mode='play';
   show('scrShop',false);
+  // Товара нет и купить не смог — смена доигрывается до последнего покупателя,
+  // а потом закрывается поражением.
+  if(G.bundles===0) beginLastCall('stock');
 }
 
 function endGame(outcome){
@@ -1949,8 +2029,13 @@ function syncHud(){
   const b=el('hudBundles');
   b.textContent = G.bundles;
   b.parentElement.classList.toggle('low', G.bundles<=3);
-  const t=Math.max(0,Math.ceil(G.timeLeft));
-  el('hudTime').textContent = `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`;
+  // Время уходит в минус: смена кончилась, но игрок доигрывает последних.
+  // Красное число со знаком — единственный сигнал, что идёт уже концовка.
+  const over = G.timeLeft < 0;
+  const t = Math.ceil(Math.abs(G.timeLeft));
+  el('hudTime').textContent =
+    `${over?'-':''}${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`;
+  el('hudTime').parentElement.classList.toggle('low', over);
 }
 
 /* ═════════════════════════════════════════════════════════════════════
@@ -2081,7 +2166,7 @@ window.GAME = {
   step(dt){ update(dt); draw(); if(G.mode==='play') syncHud(); },
   tick(dt){ update(dt); },   // без отрисовки — для быстрых прогонов баланса
   run(seconds, dt=1/60){ for(let i=0;i<Math.round(seconds/dt);i++) this.step(dt); },
-  startGame, endGame, onPoint, openShop, closeShop, showStats,
+  startGame, endGame, onPoint, openShop, closeShop, showStats, beginLastCall,
   handPos, personGeom, OPT,
 };
 
