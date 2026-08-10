@@ -249,6 +249,12 @@ const DIFFICULTY = {
 
 const SHIFT_SECONDS = 120;      // 2 минуты
 const MAX_ON_SCREEN = 5;        // сколько покупателей толпится разом к концу смены
+/* Вороны на поражении каркают все две минуты: уйти со экрана можно сразу,
+   но если хочется — можно остаться и послушать. Промежуток между карканьями
+   растёт от начала к концу, чтобы плотная стая понемногу превращалась в фон. */
+const CROW_CAW_SECONDS = 120;   // сколько всего каркают
+const CROW_GAP         = [3.2, 9.0];  // пауза между карканьями: начало → конец
+const CROW_VOL         = [0.9, 0.42]; // громкость: начало → конец
 const ASK_TIME      = 0.32;     // «Сколько стоят?» перед тем как потянуть руку
 const MAX_HANGING   = 14;       // сколько пучков влезает на верёвку
 
@@ -507,6 +513,7 @@ const G = {
   sinceThief:0,
   outcome:null,           // 'win' | 'lose'
   finaleT:0,
+  crowNext:0,             // когда каркнуть в следующий раз (сек от конца реплики)
   stats:null,
 };
 
@@ -1582,19 +1589,41 @@ function updateFinale(dt){
       c.t+=dt;
       c.y = c.baseY + Math.sin(c.t*1.6+c.ph)*H*0.004;
     }
-    // Каркают трижды, каждый раз случайная запись из пула — но только после
-    // того, как продавец договорит «Я разорён».
+    // Каркают две минуты, каждый раз случайная запись из пула — но только
+    // после того, как продавец договорит «Я разорён». Игрок волен уйти на
+    // статистику сразу, а волен и досидеть до конца.
     const t = G.finaleT - (G.finaleHold||0);
-    if(t>0.2 && !G.crowSaid){ G.crowSaid=true; cawOnce(0.9); }
-    if(t>3.4 && !G.crowSaid2){ G.crowSaid2=true; cawOnce(0.62); }
-    if(t>6.8 && !G.crowSaid3){ G.crowSaid3=true; cawOnce(0.5); }
+    if(t>0.2 && t>=G.crowNext && t<CROW_CAW_SECONDS){
+      const k = clamp(t/CROW_CAW_SECONDS, 0, 1);   // 0 в начале → 1 к концу
+      cawOnce(lerp(CROW_VOL[0], CROW_VOL[1], k));
+      G.crowNext = t + lerp(CROW_GAP[0], CROW_GAP[1], k)*rnd(0.85, 1.15);
+    }
   }
 }
 
 // Карканье: crow0 — настоящая серая ворона (Wikimedia, public domain),
 // crow1/crow2 — записи заказчика. Тянем случайную, подряд не повторяем.
+// Записи по 7–9 секунд, так что карканья местами накладываются — это и даёт
+// ощущение стаи. Ручки храним, чтобы оборвать хор, когда игрок уйдёт с экрана.
+const cawVoices = [];
 function cawOnce(vol){
-  Sound.play(pickLine('crow'), {vol, rate:rnd(0.93,1.07)});
+  const h = Sound.play(pickLine('crow'), {vol, rate:rnd(0.93,1.07)});
+  if(!h) return;
+  cawVoices.push(h);
+  h.src.onended = ()=>{ const i=cawVoices.indexOf(h); if(i>=0) cawVoices.splice(i,1); };
+}
+// Гасим не резко: обрыв буфера на полуслове щёлкает в колонках.
+function stopCaws(){
+  while(cawVoices.length){
+    const h = cawVoices.pop();
+    try{
+      const t = Sound.ctx.currentTime;
+      h.gain.gain.cancelScheduledValues(t);
+      h.gain.gain.setValueAtTime(h.gain.gain.value, t);
+      h.gain.gain.linearRampToValueAtTime(0.0001, t+0.25);
+      h.src.stop(t+0.3);
+    }catch(e){ try{ h.src.stop(); }catch(e2){} }
+  }
 }
 
 function launchFirework(){
@@ -1796,7 +1825,7 @@ function startGame(diffKey){
   G.spawnTimer=0.8; G.customersSpawned=0; G.sinceThief=0;
   G.outcome=null; G.finaleT=0; G.finaleHold=0; G.musicStarted=false;
   G.shout=null; G.lowWarned=false;
-  G.crowSaid=false; G.crowSaid2=false; G.crowSaid3=false;
+  G.crowNext=0; stopCaws();
   G.stats=freshStats();
 
   show('scrMenu',false); show('scrShop',false);
@@ -1868,6 +1897,7 @@ function endGame(outcome){
   }else{
     Sound.stopMusic();
     G.crows.length=0;
+    G.crowNext=0;
     const n=rint(3,4);
     for(let i=0;i<n;i++){
       const baseY = counterY() - H*0.012 - (i%2)*H*0.006;
@@ -1903,6 +1933,7 @@ function refreshBestLine(){
 function showStats(){
   show('scrFinale',false);
   Sound.stopMusic();
+  stopCaws();                 // ушёл со сцены — стая замолкает
   G.mode='stats';
   const s=G.stats, win=G.outcome==='win';
   el('statsTitle').textContent = win ? '🌿 Смена отработана' : '💀 Смена сорвана';
@@ -1931,6 +1962,7 @@ function showStats(){
 function toMenu(){
   G.mode='menu';
   Sound.stopMusic();
+  stopCaws();
   show('scrStats',false); show('scrFinale',false); show('scrShop',false);
   el('hud').classList.add('hidden');
   refreshBestLine();
@@ -2063,7 +2095,7 @@ document.querySelectorAll('[data-opt="bubbles"]').forEach(b=>{
 el('btnSound').addEventListener('click', ()=>{
   Sound.on = !Sound.on;
   el('btnSound').textContent = Sound.on ? '🔊' : '🔇';
-  if(!Sound.on) Sound.stopMusic();
+  if(!Sound.on){ Sound.stopMusic(); stopCaws(); }
 });
 window.addEventListener('keydown', e=>{
   if(e.key==='p'||e.key==='P'||e.key==='з'||e.key==='З'){
