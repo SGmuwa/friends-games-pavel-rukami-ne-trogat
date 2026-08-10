@@ -325,15 +325,30 @@
 
 ```
 src/game.html          ← исходник игры, здесь маркер /*__AUDIO__*/{}
+src/icon.svg           ← иконка (пучок травы), генерируется make-icon.py
+src/icon-180.png       ← та же иконка растром для iOS, генерируется make-icon.py
 build/make-audio.sh    ← mkv/ogg/opus → build/audio/*.mp3 (ffmpeg)
+build/make-icon.py     ← геометрия иконки → src/icon.* и <link> в обоих html
 build/assemble.py      ← src/game.html + build/audio/*.mp3 → ruki-ne-trogat.html
 ruki-ne-trogat.html    ← результат, единственный файл для передачи людям
 ```
 
 ```bash
 bash build/make-audio.sh      # нужен только когда меняются звуки
+python3 build/make-icon.py    # нужен только когда меняется иконка
 python3 build/assemble.py     # после любой правки src/game.html
 ```
+
+### Иконка
+
+Пучок травы в палитре игры: пергаментная плитка, зелёный веер стеблей, кровавая
+перевязка. Геометрия описана один раз в `build/make-icon.py` и выдаётся сразу в двух
+видах — вектор (`<link rel="icon">`, вкладка браузера) и PNG 180×180
+(`apple-touch-icon`, «На экран «Домой»» в iOS, где SVG не принимают). Оба вида
+вшиваются в `<head>` как data-URI: игра остаётся одним файлом. Правится не разметка,
+а параметры вверху скрипта (`BLADE_W`, `BEND_K`, `SPREAD`, `LENGTHS`), после чего
+скрипт перезаписывает `<head>` и в `src/game.html`, и в собранном
+`ruki-ne-trogat.html` — пересборка ради иконки не нужна.
 
 `make-audio.sh` при первом запуске сам скачивает ворону и увертюру с Wikimedia Commons
 в `build/audio/`; дальше использует скачанное.
