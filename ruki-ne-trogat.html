@@ -67,6 +67,13 @@
   h1{margin:0 0 4px;font-size:clamp(24px,6vw,40px);letter-spacing:.5px;color:#f2e6c8;
     text-shadow:2px 3px 0 #000}
   h1 .red{color:var(--blood)}
+  /* Плашка «18+» стоит надстрочником в самом заголовке, а не абсолютом в углу:
+     так она масштабируется вместе с ним и ни на каком экране не наезжает на
+     текст. Гаснет вместе с кровью — в мягком режиме предупреждать не о чем. */
+  .age{display:inline-block;vertical-align:super;margin-left:.22em;
+    font-size:.32em;line-height:1;padding:.28em .4em;border-radius:.4em;
+    border:2px solid var(--blood);color:#f2e6c8;background:rgba(179,22,27,.35);
+    letter-spacing:.5px;text-shadow:none}
   h2{margin:0 0 10px;font-size:clamp(18px,4.4vw,26px);color:#f2e6c8}
   p.lead{margin:6px 0 14px;font-size:15px;line-height:1.45;color:#c9b795}
   button{font:inherit;font-weight:700;font-size:16px;padding:12px 18px;border-radius:10px;
@@ -148,7 +155,8 @@
   <!-- ЭКРАН: МЕНЮ -->
   <div class="overlay" id="scrMenu">
     <div class="panel">
-      <h1>РУКАМИ <span class="red">НЕ ТРОГАТЬ!</span></h1>
+      <h1>РУКАМИ <span class="red">НЕ ТРОГАТЬ!</span><span class="age" id="ageBadge"
+        title="Мультяшное насилие: кровь и отрубленные руки. Выключается кнопкой «Без крови».">18+</span></h1>
       <p class="lead">
         Ты за прилавком с лекарственными травами. Покупатели тянут руки к товару —
         <span id="howWeapon">руби мачете</span>. Воры хватают пучки и убегают —
@@ -2177,6 +2185,9 @@ const MODE_TEXT = {
 function syncModeTexts(){
   const i = OPT.gentle ? 1 : 0;
   for(const id in MODE_TEXT) el(id).textContent = MODE_TEXT[id][i];
+  // Плашка возраста — про кровь и отрубленные руки. Мягкий режим их убирает,
+  // и плашка уходит вместе с ними.
+  el('ageBadge').classList.toggle('hidden', OPT.gentle);
 }
 
 function refreshBestLine(){

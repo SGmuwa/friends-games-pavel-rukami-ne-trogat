@@ -123,6 +123,9 @@ const MODE_TEXT = {
 function syncModeTexts(){
   const i = OPT.gentle ? 1 : 0;
   for(const id in MODE_TEXT) el(id).textContent = MODE_TEXT[id][i];
+  // Плашка возраста — про кровь и отрубленные руки. Мягкий режим их убирает,
+  // и плашка уходит вместе с ними.
+  el('ageBadge').classList.toggle('hidden', OPT.gentle);
 }
 
 function refreshBestLine(){
