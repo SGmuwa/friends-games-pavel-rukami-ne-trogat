@@ -17,8 +17,9 @@
   * src/icon.svg      — векторный исходник, он же favicon;
   * src/icon-180.png  — растр для «На экран «Домой»» в iOS (там SVG не берут).
 
-Оба вида вшиваются в <head> игры (src/game.html и собранный ruki-ne-trogat.html)
-как data-URI: игра должна оставаться одним самодостаточным файлом.
+Оба вида вшиваются в <head> игры (оболочка src/index.html и собранный
+ruki-ne-trogat.html) как data-URI: игра должна оставаться одним
+самодостаточным файлом.
 
 Запуск:  python3 build/make-icon.py
 """
@@ -33,9 +34,9 @@ from PIL import Image, ImageDraw
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SVG_OUT = ROOT / "src" / "icon.svg"
 PNG_OUT = ROOT / "src" / "icon-180.png"
-HTML_FILES = [ROOT / "src" / "game.html", ROOT / "ruki-ne-trogat.html"]
+HTML_FILES = [ROOT / "src" / "index.html", ROOT / "ruki-ne-trogat.html"]
 
-# Палитра игры (см. :root в src/game.html)
+# Палитра игры (см. :root в src/style.css)
 INK = "#1b1410"
 PAPER = "#e8dcc0"
 BLOOD = "#b3161b"

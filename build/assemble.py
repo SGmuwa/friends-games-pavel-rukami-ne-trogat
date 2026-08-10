@@ -11,8 +11,14 @@
 # и на <https://www.gnu.org/licenses/>.
 #
 # Медиафайлы (озвучка в audio-video/) — CC BY-SA 4.0, см. файл LICENSE-ASSETS.
-"""Собирает готовую игру: берёт src/game.html и вшивает в него все mp3 из
-build/audio как base64. Результат — один самодостаточный ruki-ne-trogat.html.
+"""Собирает готовую игру из исходников в src/: оболочку src/index.html,
+стили src/style.css, модули src/js/*.js и mp3 из build/audio (base64).
+Результат — один самодостаточный ruki-ne-trogat.html.
+
+Модули склеиваются подряд в один <script> в порядке имён (00-, 01-, …),
+поэтому это обычные скрипты без import/export: общая область видимости
+сохраняется, и собранный файл открывается двойным кликом с file://,
+где ES-модули запрещены CORS.
 
 Запуск:  python3 build/assemble.py
 Перед этим:  bash build/make-audio.sh
@@ -23,7 +29,9 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SRC = ROOT / "src" / "game.html"
+SRC = ROOT / "src" / "index.html"
+CSS = ROOT / "src" / "style.css"
+JS_DIR = ROOT / "src" / "js"
 AUDIO_DIR = ROOT / "build" / "audio"
 OUT = ROOT / "ruki-ne-trogat.html"
 
@@ -44,12 +52,38 @@ NAMES = [
 ]
 
 MARKER = "/*__AUDIO__*/{}"
+CSS_MARKER = "/*__CSS__*/"
+JS_MARKER = "/*__JS__*/"
+
+
+def chunk(path: pathlib.Path) -> str:
+    """Содержимое файла без последнего перевода строки.
+
+    Модули лежат на диске как обычные текстовые файлы (с \\n в конце), а внутри
+    <script> склеиваются через \\n. Лишний перевод строки здесь сдвинул бы весь
+    файл и сборка перестала бы совпадать байт в байт с прежней.
+    """
+    text = path.read_text(encoding="utf-8")
+    return text[:-1] if text.endswith("\n") else text
 
 
 def main() -> int:
     html = SRC.read_text(encoding="utf-8")
+    for marker in (CSS_MARKER, JS_MARKER):
+        if marker not in html:
+            print(f"НЕ НАЙДЕН маркер {marker} в {SRC}", file=sys.stderr)
+            return 1
+
+    modules = sorted(JS_DIR.glob("*.js"))
+    if not modules:
+        print(f"нет модулей в {JS_DIR}", file=sys.stderr)
+        return 1
+    html = html.replace(CSS_MARKER, chunk(CSS))
+    html = html.replace(JS_MARKER, "\n".join(chunk(p) for p in modules))
+
+    # Маркер аудио живёт в модуле звука, поэтому проверяется после склейки.
     if MARKER not in html:
-        print(f"НЕ НАЙДЕН маркер {MARKER} в {SRC}", file=sys.stderr)
+        print(f"НЕ НАЙДЕН маркер {MARKER} в {JS_DIR}", file=sys.stderr)
         return 1
 
     audio = {}
@@ -66,6 +100,7 @@ def main() -> int:
     html = html.replace(MARKER, json.dumps(audio, ensure_ascii=True))
     OUT.write_text(html, encoding="utf-8")
 
+    print(f"модули: {len(modules)} файлов js + style.css")
     print(f"аудио:  {total/1024:8.1f} КБ в {len(audio)} файлах")
     print(f"игра:   {OUT.stat().st_size/1024:8.1f} КБ → {OUT.name}")
     return 0
